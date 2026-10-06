@@ -39,7 +39,13 @@ export function rotate(state: PlacementState): PlacementState {
 
 /** Selects a ship to place; a ship that is already on the board is picked back up. */
 export function selectShip(state: PlacementState, type: ShipType): PlacementState {
-  return { ...state, board: removeShip(state.board, type), selected: type };
+  const ship = state.board.ships.find((s) => s.type === type);
+  return {
+    ...state,
+    board: removeShip(state.board, type),
+    selected: type,
+    orientation: ship?.orientation ?? state.orientation,
+  };
 }
 
 /** Picks up the ship covering `coord`, if any. */
@@ -48,7 +54,7 @@ export function pickUpAt(state: PlacementState, coord: Coord): PlacementState | 
   if (!ship) {
     return null;
   }
-  return { ...selectShip(state, ship.type), orientation: ship.orientation };
+  return selectShip(state, ship.type);
 }
 
 export function placeSelected(

@@ -121,3 +121,20 @@ in self-testing, so that recurring failure modes stay visible.
 - **Fix:** The hit rule now skips sunk cells
   (`.cell.hit:not(.ship, .sunk)`).
 - **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 8. Picking up a placed ship forgot which way it faced
+
+- **What happened:** Clicking a placed ship's button to move it kept
+  whatever orientation was last used, not the ship's own. A vertical ship
+  would suddenly preview horizontally, and putting it back in its old spot
+  was rejected.
+- **How it was found:** Devin Review on PR 4. Confirmed with a failing
+  regression test.
+- **Root cause:** `selectShip` removed the ship but kept
+  `state.orientation`. Only `pickUpAt` (clicking the ship on the board)
+  restored it.
+- **Fix:** `selectShip` restores the placed ship's orientation, and
+  `pickUpAt` reuses it. Covered by 'selecting a placed ship restores its
+  orientation' and 'selecting an unplaced ship keeps the current
+  orientation' (placement.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/4

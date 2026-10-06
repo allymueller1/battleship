@@ -78,6 +78,20 @@ describe('selectShip / pickUpAt', () => {
     expect(s.selected).toBe('destroyer');
     expect(s.board.ships).toHaveLength(0);
   });
+
+  it('selecting a placed ship restores its orientation', () => {
+    let state = rotate(initialPlacement());
+    state = placeSelected(state, { row: 0, col: 0 }).state; // carrier, vertical
+    state = rotate(state); // orientation is now horizontal
+    state = selectShip(state, 'carrier');
+    expect(state.orientation).toBe('vertical');
+    expect(previewAt(state, { row: 0, col: 0 })?.valid).toBe(true);
+  });
+
+  it('selecting an unplaced ship keeps the current orientation', () => {
+    const state = selectShip(rotate(initialPlacement()), 'destroyer');
+    expect(state.orientation).toBe('vertical');
+  });
 });
 
 describe('randomizePlacement', () => {
