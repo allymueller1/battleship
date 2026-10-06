@@ -1,0 +1,86 @@
+import {
+  createBoard,
+  placeShip,
+  randomFleet,
+  removeShip,
+  shipAt,
+  shipCells,
+  validatePlacement,
+  type PlacementError,
+} from '../game/board';
+import { isInBounds } from '../game/coord';
+import type { Rng } from '../game/rng';
+import { FLEET, getShipSpec } from '../game/ships';
+import type { Board, Coord, Orientation, ShipType } from '../game/types';
+
+/** UI-side state while the player arranges their fleet. */
+export interface PlacementState {
+  readonly board: Board;
+  readonly selected: ShipType | null;
+  readonly orientation: Orientation;
+}
+
+export type PlaceError = PlacementError | 'none-selected';
+
+export function initialPlacement(): PlacementState {
+  return { board: createBoard(), selected: FLEET[0]?.type ?? null, orientation: 'horizontal' };
+}
+
+export function nextUnplaced(board: Board): ShipType | null {
+  return FLEET.find((spec) => !board.ships.some((s) => s.type === spec.type))?.type ?? null;
+}
+
+export function rotate(state: PlacementState): PlacementState {
+  return {
+    ...state,
+    orientation: state.orientation === 'horizontal' ? 'vertical' : 'horizontal',
+  };
+}
+
+/** Selects a ship to place; a ship that is already on the board is picked back up. */
+export function selectShip(state: PlacementState, type: ShipType): PlacementState {
+  return { ...state, board: removeShip(state.board, type), selected: type };
+}
+
+/** Picks up the ship covering `coord`, if any. */
+export function pickUpAt(state: PlacementState, coord: Coord): PlacementState | null {
+  const ship = shipAt(state.board, coord);
+  if (!ship) {
+    return null;
+  }
+  return { ...selectShip(state, ship.type), orientation: ship.orientation };
+}
+
+export function placeSelected(
+  state: PlacementState,
+  origin: Coord,
+): { state: PlacementState; error: PlaceError | null } {
+  if (!state.selected) {
+    return { state, error: 'none-selected' };
+  }
+  const error = validatePlacement(state.board, state.selected, origin, state.orientation);
+  if (error) {
+    return { state, error };
+  }
+  const board = placeShip(state.board, state.selected, origin, state.orientation);
+  return { state: { ...state, board, selected: nextUnplaced(board) }, error: null };
+}
+
+export function randomizePlacement(state: PlacementState, rng: Rng): PlacementState {
+  return { ...state, board: randomFleet(rng), selected: null };
+}
+
+/** The on-board cells the selected ship would cover at `origin`, and whether it fits there. */
+export function previewAt(
+  state: PlacementState,
+  origin: Coord | null,
+): { cells: Coord[]; valid: boolean } | null {
+  if (!state.selected || !origin) {
+    return null;
+  }
+  const cells = shipCells(origin, state.orientation, getShipSpec(state.selected).length);
+  return {
+    cells: cells.filter(isInBounds),
+    valid: validatePlacement(state.board, state.selected, origin, state.orientation) === null,
+  };
+}
