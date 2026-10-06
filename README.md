@@ -12,6 +12,17 @@ npm ci
 npm run dev
 ```
 
+## Deployment
+
+Every push to `main` runs the full CI checks (lint, format, typecheck, tests
+with coverage, build) and deploys `dist/` to GitHub Pages only if they pass:
+https://allymueller1.github.io/battleship/
+
+The deploy workflow (`.github/workflows/deploy.yml`) reuses
+`.github/workflows/ci.yml` via `workflow_call`, so pull requests and deploys
+run the same checks. Pages must be set to **GitHub Actions** under
+Settings → Pages.
+
 ## Scripts
 
 | Command                | Description                        |
