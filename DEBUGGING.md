@@ -39,3 +39,19 @@ in self-testing, so that recurring failure modes stay visible.
 - **Fix:** `startGame` now throws when `playerBoard.shots.size > 0`.
   Covered by 'rejects a board that already has shots' (game.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/2
+
+### 3. Aliased coordinates break immutability
+
+- **What happened:** Mutating a caller's coordinate object after `placeShip`
+  or `fireShot` changed already-recorded game state — a ship's stored
+  `origin` and a shot result's `coord` referenced the caller's object.
+- **How it was found:** Devin Review on PR 2. Confirmed with a failing
+  regression test.
+- **Root cause:** `placeShip` stored the `origin` reference in `PlacedShip`,
+  and `fireShot` put the `coord` reference into `ShotResult`; neither made
+  a defensive copy.
+- **Fix:** `placeShip` stores `{ ...origin }` and `fireShot` uses a copied
+  `shot` in every result branch. Covered by 'stores a copy of the origin,
+  not the caller object' (board.test.ts) and 'stores a copy of the coord in
+  the result, not the caller object' (shots.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/2

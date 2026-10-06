@@ -15,18 +15,19 @@ export function fireShot(board: Board, coord: Coord): { board: Board; result: Sh
     throw new Error(`Already fired at: ${key}`);
   }
 
+  const shot = { ...coord };
   const ship = board.ships.find((s) => s.cells.some((c) => coordKey(c) === key));
   const shots = new Map(board.shots);
   shots.set(key, ship ? 'hit' : 'miss');
   const next: Board = { ...board, shots };
 
   if (!ship) {
-    return { board: next, result: { kind: 'miss', coord } };
+    return { board: next, result: { kind: 'miss', coord: shot } };
   }
   if (isShipSunk(next, ship)) {
-    return { board: next, result: { kind: 'sunk', coord, ship } };
+    return { board: next, result: { kind: 'sunk', coord: shot, ship } };
   }
-  return { board: next, result: { kind: 'hit', coord, shipType: ship.type } };
+  return { board: next, result: { kind: 'hit', coord: shot, shipType: ship.type } };
 }
 
 export function isShipSunk(board: Board, ship: PlacedShip): boolean {

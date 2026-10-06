@@ -61,7 +61,7 @@ export function placeShip(
   }
   const ship: PlacedShip = {
     type,
-    origin,
+    origin: { ...origin },
     orientation,
     cells: shipCells(origin, orientation, getShipSpec(type).length),
   };

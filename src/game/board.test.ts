@@ -120,6 +120,14 @@ describe('placeShip', () => {
     placeShip(board, 'destroyer', { row: 0, col: 0 }, 'horizontal');
     expect(board.ships).toHaveLength(0);
   });
+
+  it('stores a copy of the origin, not the caller object', () => {
+    const origin = { row: 0, col: 0 };
+    const board = placeShip(emptyBoard(), 'destroyer', origin, 'horizontal');
+    origin.row = 7;
+    expect(board.ships[0]?.origin).toEqual({ row: 0, col: 0 });
+    expect(board.ships[0]?.origin).toEqual(board.ships[0]?.cells[0]);
+  });
 });
 
 describe('removeShip', () => {

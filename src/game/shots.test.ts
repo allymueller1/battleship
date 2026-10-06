@@ -47,6 +47,13 @@ describe('fireShot', () => {
     fireShot(board, { row: 0, col: 0 });
     expect(board.shots.size).toBe(0);
   });
+
+  it('stores a copy of the coord in the result, not the caller object', () => {
+    const coord = { row: 5, col: 5 };
+    const { result } = fireShot(boardWithDestroyer(), coord);
+    coord.row = 0;
+    expect(result.coord).toEqual({ row: 5, col: 5 });
+  });
 });
 
 describe('isShipSunk / allShipsSunk', () => {
