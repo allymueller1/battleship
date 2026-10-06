@@ -106,3 +106,18 @@ in self-testing, so that recurring failure modes stay visible.
 - **Fix:** The layout switches to two columns only at 62rem, the width
   where two padded boards fit. Below that, the boards stack.
 - **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 7. Sunk enemy ships looked like ordinary hits
+
+- **What happened:** After you sank an enemy ship, its cells kept the dark
+  hit colour instead of turning the sunk red, so you couldn't tell a sunk
+  ship from hits on a ship still afloat. Your own sunk ships looked right.
+- **How it was found:** Devin Review on PR 4. Confirmed in the browser: a
+  sunk enemy cell computed to the hit colour rgb(58, 36, 48) instead of
+  `--sunk` #7a1d22 (before screenshot).
+- **Root cause:** `.cell.hit:not(.ship)` is more specific than `.cell.sunk`.
+  Enemy cells don't get `.ship` until the game ends, so the hit rule always
+  won on them.
+- **Fix:** The hit rule now skips sunk cells
+  (`.cell.hit:not(.ship, .sunk)`).
+- **PR:** https://github.com/allymueller1/battleship/pull/4
