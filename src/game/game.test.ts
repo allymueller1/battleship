@@ -3,7 +3,7 @@ import { randomFleet } from './board';
 import { allCoords, sameCoord } from './coord';
 import { createGame, fire, opponentOf, startGame, type GameState } from './game';
 import { createRng } from './rng';
-import { allShipsSunk } from './shots';
+import { allShipsSunk, fireShot } from './shots';
 
 const SEED = 12345;
 
@@ -37,6 +37,12 @@ describe('startGame', () => {
   it('rejects starting outside the placing phase', () => {
     const state = playingState();
     expect(() => startGame(state, state.playerBoard)).toThrow(/phase/);
+  });
+
+  it('rejects a board that already has shots', () => {
+    const state = createGame(createRng(SEED));
+    const board = fireShot(randomFleet(createRng(SEED + 1)), { row: 9, col: 9 }).board;
+    expect(() => startGame(state, board)).toThrow(/shots/);
   });
 
   it('moves to playing with the player to move', () => {

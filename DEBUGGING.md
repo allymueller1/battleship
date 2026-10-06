@@ -27,3 +27,15 @@ in self-testing, so that recurring failure modes stay visible.
   fractional origin' (board.test.ts) and the fractional `fire` rejection in
   game.test.ts.
 - **PR:** https://github.com/allymueller1/battleship/pull/2
+
+### 2. Starting a game with pre-fired shots
+
+- **What happened:** `startGame` accepted a player board that already had
+  shots recorded on it, so a game could begin with pre-fired hits.
+- **How it was found:** Devin Review on PR 2. Confirmed with a failing
+  regression test.
+- **Root cause:** `startGame` checked the phase and fleet completeness but
+  never checked `playerBoard.shots`.
+- **Fix:** `startGame` now throws when `playerBoard.shots.size > 0`.
+  Covered by 'rejects a board that already has shots' (game.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/2

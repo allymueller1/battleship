@@ -44,6 +44,9 @@ export function startGame(state: GameState, playerBoard: Board): GameState {
   if (!isFleetComplete(playerBoard)) {
     throw new Error('Cannot start game: fleet is not complete');
   }
+  if (playerBoard.shots.size > 0) {
+    throw new Error('Cannot start game: board already has shots');
+  }
   return { ...state, phase: 'playing', turn: 'player', playerBoard };
 }
 
