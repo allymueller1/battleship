@@ -72,7 +72,7 @@ h3 {
   grid-template-columns: 1fr;
 }
 
-@media (min-width: 52rem) {
+@media (min-width: 62rem) {
   .layout {
     grid-template-columns: 1fr 1fr;
   }

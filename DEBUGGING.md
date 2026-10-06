@@ -91,3 +91,18 @@ in self-testing, so that recurring failure modes stay visible.
   Checked in the browser: the hovered origin cell now computes to the
   invalid-preview orange.
 - **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 6. Boards cut off at medium desktop widths
+
+- **What happened:** At viewport widths of about 832–990px, the two-column
+  battle layout was wider than the window. The right-hand "Your fleet"
+  board was cut off (columns H–J hidden) and the page scrolled sideways.
+- **How it was found:** Devin Review on PR 4. Confirmed in the browser: at
+  832px the page was 965px wide and the board was clipped (before
+  screenshot).
+- **Root cause:** The layout switched to two columns at 52rem (832px). Two
+  boards with fixed-size cells need about 980px, so the grid columns grew
+  past the window.
+- **Fix:** The layout switches to two columns only at 62rem, the width
+  where two padded boards fit. Below that, the boards stack.
+- **PR:** https://github.com/allymueller1/battleship/pull/4
