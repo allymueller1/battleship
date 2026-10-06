@@ -55,3 +55,22 @@ in self-testing, so that recurring failure modes stay visible.
   not the caller object' (board.test.ts) and 'stores a copy of the coord in
   the result, not the caller object' (shots.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/2
+
+### 4. Rejected computer turns consumed randomness
+
+- **What happened:** A `playComputerTurn` call that was later rejected (the
+  player's turn, still placing, game over) still drew from the seeded rng,
+  so every subsequent computer shot came out different — a rejected move
+  had a side effect.
+- **How it was found:** Devin Review on PR 3. Confirmed with a failing
+  regression test.
+- **Root cause:** `playComputerTurn` called `chooseShot`, which draws from
+  `rng`, before `fire` got the chance to reject the move on phase or turn
+  grounds.
+- **Fix:** New `turnRejection` helper in game.ts performs the phase/turn
+  checks; `fire` uses it, and `playComputerTurn` returns the rejection
+  before calling `chooseShot`. Covered by 'does not draw from the rng when
+  the turn is rejected' and 'a rejected call does not change the next
+  computer shot' (ai/index.test.ts), plus 'covers all four results'
+  (game.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/3

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { randomFleet } from './board';
 import { allCoords, sameCoord } from './coord';
-import { createGame, fire, opponentOf, startGame, type GameState } from './game';
+import { createGame, fire, opponentOf, startGame, turnRejection, type GameState } from './game';
 import { createRng } from './rng';
 import { allShipsSunk, fireShot } from './shots';
 
@@ -178,6 +178,19 @@ describe('fire', () => {
     expect(state.winner).not.toBeNull();
     const loserBoard = state.winner === 'player' ? state.computerBoard : state.playerBoard;
     expect(allShipsSunk(loserBoard)).toBe(true);
+  });
+});
+
+describe('turnRejection', () => {
+  it('covers all four results', () => {
+    const placing = createGame(createRng(SEED));
+    const playing = playingState();
+    expect(turnRejection(playing, 'player')).toBeNull();
+    expect(turnRejection(playing, 'computer')).toBe('not-your-turn');
+    expect(turnRejection(placing, 'player')).toBe('wrong-phase');
+    expect(turnRejection({ ...playing, phase: 'over', winner: 'player' }, 'player')).toBe(
+      'game-over',
+    );
   });
 });
 
