@@ -74,3 +74,67 @@ in self-testing, so that recurring failure modes stay visible.
   computer shot' (ai/index.test.ts), plus 'covers all four results'
   (game.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/3
+
+### 5. Hover colour hid the placement preview under the mouse
+
+- **What happened:** While placing a ship, the cell under the mouse showed
+  the plain hover colour instead of green or orange. The cell you're
+  pointing at is the ship's starting cell, so you couldn't tell whether
+  that cell itself was valid.
+- **How it was found:** My own browser testing, from a screenshot taken
+  while hovering a carrier that hung off the right edge.
+- **Root cause:** The CSS hover rule `.board:not(.board--passive) .cell:hover`
+  is more specific than `.cell.preview-valid` / `.cell.preview-invalid`,
+  so on the hovered cell it won.
+- **Fix:** The hover rule now skips cells that are showing a preview, a hit
+  or a sunk ship (`:not(.preview-valid, .preview-invalid, .hit, .sunk)`).
+  Checked in the browser: the hovered origin cell now computes to the
+  invalid-preview orange.
+- **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 6. Boards cut off at medium desktop widths
+
+- **What happened:** At viewport widths of about 832–990px, the two-column
+  battle layout was wider than the window. The right-hand "Your fleet"
+  board was cut off (columns H–J hidden) and the page scrolled sideways.
+- **How it was found:** Devin Review on PR 4. Confirmed in the browser: at
+  832px the page was 965px wide and the board was clipped (before
+  screenshot).
+- **Root cause:** The layout switched to two columns at 52rem (832px). Two
+  boards with fixed-size cells need about 980px, so the grid columns grew
+  past the window.
+- **Fix:** The layout switches to two columns only at 62rem, the width
+  where two padded boards fit. Below that, the boards stack.
+- **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 7. Sunk enemy ships looked like ordinary hits
+
+- **What happened:** After you sank an enemy ship, its cells kept the dark
+  hit colour instead of turning the sunk red, so you couldn't tell a sunk
+  ship from hits on a ship still afloat. Your own sunk ships looked right.
+- **How it was found:** Devin Review on PR 4. Confirmed in the browser: a
+  sunk enemy cell computed to the hit colour rgb(58, 36, 48) instead of
+  `--sunk` #7a1d22 (before screenshot).
+- **Root cause:** `.cell.hit:not(.ship)` is more specific than `.cell.sunk`.
+  Enemy cells don't get `.ship` until the game ends, so the hit rule always
+  won on them.
+- **Fix:** The hit rule now skips sunk cells
+  (`.cell.hit:not(.ship, .sunk)`).
+- **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 8. Picking up a placed ship forgot which way it faced
+
+- **What happened:** Clicking a placed ship's button to move it kept
+  whatever orientation was last used, not the ship's own. A vertical ship
+  would suddenly preview horizontally, and putting it back in its old spot
+  was rejected.
+- **How it was found:** Devin Review on PR 4. Confirmed with a failing
+  regression test.
+- **Root cause:** `selectShip` removed the ship but kept
+  `state.orientation`. Only `pickUpAt` (clicking the ship on the board)
+  restored it.
+- **Fix:** `selectShip` restores the placed ship's orientation, and
+  `pickUpAt` reuses it. Covered by 'selecting a placed ship restores its
+  orientation' and 'selecting an unplaced ship keeps the current
+  orientation' (placement.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/4

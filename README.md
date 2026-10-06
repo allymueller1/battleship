@@ -43,7 +43,12 @@ The layout separates pure game logic from DOM rendering:
 - `src/game/ai/normal.ts` — normal opponent: checkerboard hunt, then targets hit lines
 - `src/game/ai/hard.ts` — hard opponent: probability-density targeting (argmax shot)
 - `src/game/ai/index.ts` — difficulty dispatch and the computer's turn
-- `src/ui/` — DOM rendering and interaction (planned, not yet built)
+- `src/main.ts` — entry point, mounts the app
+- `src/ui/app.ts` — mounts the app and wires placement, battle and end screens
+- `src/ui/boardView.ts` — accessible, keyboard-navigable board grid
+- `src/ui/fleetTracker.ts` — afloat/sunk list per side
+- `src/ui/placement.ts` — pure placement state
+- `src/ui/messages.ts` — status and shot message text
 
 All of `src/game/` is pure, immutable logic tested with Vitest; tests live
 next to their modules as `<module>.test.ts`.

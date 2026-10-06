@@ -8,7 +8,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/game/**'],
+      include: ['src/game/**', 'src/ui/placement.ts', 'src/ui/messages.ts'],
       thresholds: {
         statements: 90,
         branches: 90,
