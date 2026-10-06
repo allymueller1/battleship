@@ -58,6 +58,60 @@ describe('playComputerTurn', () => {
       reason: 'not-your-turn',
     });
   });
+
+  it('does not draw from the rng when the turn is rejected', () => {
+    let calls = 0;
+    const base = createRng(2);
+    const rng = () => {
+      calls++;
+      return base();
+    };
+
+    const playingState = startGame(createGame(createRng(42)), randomFleet(createRng(7)));
+    // (a) the player's turn
+    expect(playComputerTurn(playingState, 'easy', rng)).toEqual({
+      ok: false,
+      reason: 'not-your-turn',
+    });
+    expect(calls).toBe(0);
+
+    // (b) still placing
+    expect(playComputerTurn(createGame(createRng(42)), 'easy', rng)).toEqual({
+      ok: false,
+      reason: 'wrong-phase',
+    });
+    expect(calls).toBe(0);
+
+    // (c) game over
+    expect(
+      playComputerTurn({ ...playingState, phase: 'over', winner: 'player' }, 'easy', rng),
+    ).toEqual({
+      ok: false,
+      reason: 'game-over',
+    });
+    expect(calls).toBe(0);
+  });
+
+  it('a rejected call does not change the next computer shot', () => {
+    const playerTurn = startGame(createGame(createRng(42)), randomFleet(createRng(7)));
+    const playerShot = fire(playerTurn, 'player', { row: 9, col: 9 });
+    expect(playerShot.ok).toBe(true);
+    if (!playerShot.ok) return;
+    const computerTurn = playerShot.state;
+
+    // rejected call first, then the real computer turn, on one rng
+    const rngA = createRng(5);
+    playComputerTurn(playerTurn, 'easy', rngA);
+    const afterReject = playComputerTurn(computerTurn, 'easy', rngA);
+
+    // only the real computer turn on a fresh identical rng
+    const clean = playComputerTurn(computerTurn, 'easy', createRng(5));
+
+    expect(afterReject.ok && clean.ok).toBe(true);
+    if (afterReject.ok && clean.ok) {
+      expect(afterReject.result.coord).toEqual(clean.result.coord);
+    }
+  });
 });
 
 describe('difficulty strength ordering', () => {

@@ -50,15 +50,24 @@ export function startGame(state: GameState, playerBoard: Board): GameState {
   return { ...state, phase: 'playing', turn: 'player', playerBoard };
 }
 
-export function fire(state: GameState, shooter: Player, coord: Coord): MoveOutcome {
+/** Why `shooter` may not move right now, or null if they may. */
+export function turnRejection(state: GameState, shooter: Player): MoveRejection | null {
   if (state.phase === 'over') {
-    return { ok: false, reason: 'game-over' };
+    return 'game-over';
   }
   if (state.phase !== 'playing') {
-    return { ok: false, reason: 'wrong-phase' };
+    return 'wrong-phase';
   }
   if (state.turn !== shooter) {
-    return { ok: false, reason: 'not-your-turn' };
+    return 'not-your-turn';
+  }
+  return null;
+}
+
+export function fire(state: GameState, shooter: Player, coord: Coord): MoveOutcome {
+  const rejection = turnRejection(state, shooter);
+  if (rejection) {
+    return { ok: false, reason: rejection };
   }
   if (!isInBounds(coord)) {
     return { ok: false, reason: 'out-of-bounds' };
