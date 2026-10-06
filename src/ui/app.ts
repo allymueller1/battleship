@@ -116,6 +116,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   let hover: Coord | null = null;
   let message = '';
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
+  // Recomputed once per render; playerCell/enemyCell close over them.
+  let playerSunk = new Set<string>();
+  let enemySunk = new Set<string>();
 
   const playerView = createBoardView({
     label: 'Your fleet',
@@ -281,7 +284,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const board = game.playerBoard;
     const ship = shipAt(board, c);
     const mark = board.shots.get(coordKey(c));
-    const sunk = sunkCellKeys(board).has(coordKey(c));
+    const sunk = playerSunk.has(coordKey(c));
     const classes = [ship ? 'ship' : '', mark ?? '', sunk ? 'sunk' : ''].filter(Boolean);
     const parts = [label, ship ? FLEET.find((s) => s.type === ship.type)?.name : 'water'];
     if (mark) parts.push(sunk ? 'sunk' : mark);
@@ -292,7 +295,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const board = game.computerBoard;
     const key = coordKey(c);
     const mark = board.shots.get(key);
-    const sunk = sunkCellKeys(board).has(key);
+    const sunk = enemySunk.has(key);
     const revealed = game.phase === 'over' && shipAt(board, c) !== undefined;
     const classes = [mark ?? '', sunk ? 'sunk' : '', revealed ? 'ship' : ''].filter(Boolean);
     const state = sunk ? 'hit, ship sunk' : (mark ?? (revealed ? 'enemy ship' : 'not fired'));
@@ -310,6 +313,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     if (el.status.textContent !== status) {
       el.status.textContent = status;
     }
+
+    playerSunk = sunkCellKeys(game.playerBoard);
+    enemySunk = sunkCellKeys(game.computerBoard);
 
     playerView.setInteractive(placing);
     enemyView.setInteractive(game.phase === 'playing');
