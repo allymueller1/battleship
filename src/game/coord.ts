@@ -5,7 +5,14 @@ export function coordKey(c: Coord): string {
 }
 
 export function isInBounds(c: Coord): boolean {
-  return c.row >= 0 && c.row < BOARD_SIZE && c.col >= 0 && c.col < BOARD_SIZE;
+  return (
+    Number.isInteger(c.row) &&
+    Number.isInteger(c.col) &&
+    c.row >= 0 &&
+    c.row < BOARD_SIZE &&
+    c.col >= 0 &&
+    c.col < BOARD_SIZE
+  );
 }
 
 /** Every board cell in row-major order (100 cells). */

@@ -68,6 +68,12 @@ describe('validatePlacement', () => {
     );
   });
 
+  it('rejects a fractional origin', () => {
+    expect(validatePlacement(createBoard(), 'destroyer', { row: 0.5, col: 0 }, 'horizontal')).toBe(
+      'out-of-bounds',
+    );
+  });
+
   it('rejects overlap with an existing ship', () => {
     const board = placeShip(emptyBoard(), 'carrier', { row: 0, col: 0 }, 'horizontal');
     expect(validatePlacement(board, 'destroyer', { row: 0, col: 4 }, 'vertical')).toBe('overlap');

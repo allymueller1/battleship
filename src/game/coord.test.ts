@@ -33,6 +33,17 @@ describe('isInBounds', () => {
       expect(isInBounds(c)).toBe(false);
     }
   });
+
+  it('rejects non-integer coords', () => {
+    for (const c of [
+      { row: 0.5, col: 0 },
+      { row: 0, col: 0.5 },
+      { row: NaN, col: 0 },
+      { row: 0, col: NaN },
+    ]) {
+      expect(isInBounds(c)).toBe(false);
+    }
+  });
 });
 
 describe('allCoords', () => {

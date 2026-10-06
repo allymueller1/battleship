@@ -58,6 +58,10 @@ describe('fire', () => {
       ok: false,
       reason: 'out-of-bounds',
     });
+    expect(fire(state, 'player', { row: 0.5, col: 0 })).toEqual({
+      ok: false,
+      reason: 'out-of-bounds',
+    });
 
     const shot = fire(state, 'player', { row: 0, col: 0 });
     expect(shot.ok).toBe(true);
