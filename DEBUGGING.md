@@ -74,3 +74,20 @@ in self-testing, so that recurring failure modes stay visible.
   computer shot' (ai/index.test.ts), plus 'covers all four results'
   (game.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/3
+
+### 5. Hover colour hid the placement preview under the mouse
+
+- **What happened:** While placing a ship, the cell under the mouse showed
+  the plain hover colour instead of green or orange. The cell you're
+  pointing at is the ship's starting cell, so you couldn't tell whether
+  that cell itself was valid.
+- **How it was found:** My own browser testing, from a screenshot taken
+  while hovering a carrier that hung off the right edge.
+- **Root cause:** The CSS hover rule `.board:not(.board--passive) .cell:hover`
+  is more specific than `.cell.preview-valid` / `.cell.preview-invalid`,
+  so on the hovered cell it won.
+- **Fix:** The hover rule now skips cells that are showing a preview, a hit
+  or a sunk ship (`:not(.preview-valid, .preview-invalid, .hit, .sunk)`).
+  Checked in the browser: the hovered origin cell now computes to the
+  invalid-preview orange.
+- **PR:** https://github.com/allymueller1/battleship/pull/4
