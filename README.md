@@ -38,6 +38,11 @@ The layout separates pure game logic from DOM rendering:
 - `src/game/board.ts` — board creation and ship placement
 - `src/game/shots.ts` — shot resolution and fleet status
 - `src/game/game.ts` — game state, turn order, win detection
+- `src/game/ai/view.ts` — what the opponent can see: untried cells, unresolved hits
+- `src/game/ai/easy.ts` — easy opponent: uniform random untried cell
+- `src/game/ai/normal.ts` — normal opponent: checkerboard hunt, then targets hit lines
+- `src/game/ai/hard.ts` — hard opponent: probability-density targeting (argmax shot)
+- `src/game/ai/index.ts` — difficulty dispatch and the computer's turn
 - `src/ui/` — DOM rendering and interaction (planned, not yet built)
 
 All of `src/game/` is pure, immutable logic tested with Vitest; tests live
