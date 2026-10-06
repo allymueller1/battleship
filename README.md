@@ -29,9 +29,16 @@ npm run dev
 
 ## Project structure
 
-The intended layout separates pure game logic from DOM rendering:
+The layout separates pure game logic from DOM rendering:
 
-- `src/game/` — pure, framework-free game logic, tested with Vitest
-- `src/ui/` — DOM rendering and interaction
+- `src/game/types.ts` — shared types: coords, ships, boards, shot results
+- `src/game/coord.ts` — coordinate keys, bounds checks, neighbors
+- `src/game/ships.ts` — the five-ship fleet spec
+- `src/game/rng.ts` — seedable RNG (mulberry32) injected everywhere
+- `src/game/board.ts` — board creation and ship placement
+- `src/game/shots.ts` — shot resolution and fleet status
+- `src/game/game.ts` — game state, turn order, win detection
+- `src/ui/` — DOM rendering and interaction (planned, not yet built)
 
-Neither directory exists yet; they will be added as the game is built.
+All of `src/game/` is pure, immutable logic tested with Vitest; tests live
+next to their modules as `<module>.test.ts`.

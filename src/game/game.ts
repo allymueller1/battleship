@@ -16,11 +16,7 @@ export interface GameState {
 }
 
 export type MoveRejection =
-  | 'wrong-phase'
-  | 'not-your-turn'
-  | 'already-fired'
-  | 'out-of-bounds'
-  | 'game-over';
+  'wrong-phase' | 'not-your-turn' | 'already-fired' | 'out-of-bounds' | 'game-over';
 
 export type MoveOutcome =
   | { readonly ok: true; readonly state: GameState; readonly result: ShotResult }
