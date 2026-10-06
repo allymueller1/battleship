@@ -4,7 +4,289 @@
   box-sizing: border-box;
 }
 
+:root {
+  --bg: #0b1d33;
+  --panel: #12304f;
+  --text: #f2f6fa;
+  --muted: #b8c7d9;
+  --water: #1d4f7c;
+  --water-hover: #2a6aa3;
+  --ship: #8a98a8;
+  --hit: #e5484d;
+  --sunk: #7a1d22;
+  --miss: #d7e3ef;
+  --valid: #3ecf8e;
+  --invalid: #ff8a3d;
+  --focus: #ffd23f;
+  --cell: min(2.4rem, calc((100vw - 3rem) / 11));
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+#app {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.75rem;
+}
+
+h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+h3 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 1rem;
+}
+
+.status {
+  min-height: 3em;
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 52rem) {
+  .layout {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.panel {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.hint {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.4rem;
+  background: transparent;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--focus);
+  border-color: var(--focus);
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ship-list,
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ship-button[aria-pressed='true'] {
+  background: var(--focus);
+  border-color: var(--focus);
+  color: #1a1a1a;
+}
+
+.ship-button.placed:not([aria-pressed='true']) {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.difficulty {
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.4rem;
+}
+
+.difficulty label {
+  margin-right: 1rem;
+  white-space: nowrap;
+}
+
+/* Board */
+.board {
+  display: grid;
+  grid-template-columns: repeat(11, var(--cell));
+  grid-auto-rows: var(--cell);
+  gap: 2px;
+  width: max-content;
+  margin: 0 auto;
+}
+
+.board [role='row'],
+.board [role='gridcell'] {
+  display: contents;
+}
+
+.board-label {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.cell {
+  position: relative;
+  width: var(--cell);
+  height: var(--cell);
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--water);
+}
+
+.board:not(.board--passive) .cell:hover:not(.preview-valid, .preview-invalid, .hit, .sunk) {
+  background: var(--water-hover);
+}
+
+.board--passive .cell {
+  cursor: default;
+}
+
+.cell.ship {
+  background: var(--ship);
+}
+
+.cell.preview-valid {
+  background: var(--valid);
+}
+
+.cell.preview-invalid {
+  background: var(--invalid);
+}
+
+.cell.miss::after {
+  content: '';
+  position: absolute;
+  inset: 38%;
+  border-radius: 50%;
+  background: var(--miss);
+}
+
+.cell.hit::after {
+  content: '✕';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--hit);
+  font-weight: 700;
+  font-size: calc(var(--cell) * 0.6);
+}
+
+.cell.hit:not(.ship) {
+  background: #3a2430;
+}
+
+.cell.sunk {
+  background: var(--sunk);
+}
+
+.cell.sunk::after {
+  color: #fff;
+}
+
+/* Fleet trackers */
+.tracker ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tracker li {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.tracker-pips {
+  color: var(--ship);
+  letter-spacing: 1px;
+}
+
+.tracker li.sunk .tracker-name {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.tracker li.sunk .tracker-pips {
+  color: var(--hit);
+}
+
+.tracker li.sunk .tracker-state {
+  color: var(--hit);
+  font-weight: 600;
+}
+
+/* End screen */
+.end {
+  max-width: 22rem;
+  padding: 1.5rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--panel);
+  color: var(--text);
+  text-align: center;
+}
+
+.end::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cell {
+    transition: background-color 120ms;
+  }
 }
