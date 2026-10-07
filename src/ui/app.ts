@@ -27,6 +27,7 @@ import {
   selectShip,
   type PlacementState,
 } from './placement';
+import { boardInteractivity } from './interactivity';
 
 const COMPUTER_DELAY_MS = 700;
 
@@ -379,8 +380,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     playerSunk = sunkCellKeys(game.playerBoard);
     enemySunk = sunkCellKeys(game.computerBoard);
 
-    playerView.setInteractive(placing);
-    enemyView.setInteractive(game.phase === 'playing');
+    const interactivity = boardInteractivity(game);
+    playerView.setInteractive(interactivity.player);
+    enemyView.setInteractive(interactivity.enemy);
     playerView.update(playerCell);
     enemyView.update(enemyCell);
     playerTracker.update(game.playerBoard);
