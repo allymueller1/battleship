@@ -156,3 +156,22 @@ in self-testing, so that recurring failure modes stay visible.
   `min(2.4rem, calc((100cqi - 10 * var(--gap)) / 11))`. Checked from 360px
   to 1280px wide with no overflow.
 - **PR:** https://github.com/allymueller1/battleship/pull/6
+
+### 10. The enemy board stayed clickable during the computer's turn
+
+- **What happened:** If you clicked Enemy waters again while the computer
+  was taking its turn, the result of the shot you had just fired ("You
+  fired at A1: miss.") was replaced by "Hold on, it's the computer's turn."
+  The board also still lit up under the mouse, as if it were your turn. No
+  extra shot was fired.
+- **How it was found:** Devin QA session (scripted browser run against the
+  live site). Filed as issue #7 and confirmed with a failing regression
+  test.
+- **Root cause:** `render()` made the enemy board interactive whenever the
+  game was in the playing phase, without checking whose turn it was.
+- **Fix:** The rules for which board is clickable now live in
+  `boardInteractivity` (src/ui/interactivity.ts). The enemy board is only
+  interactive when `turnRejection(state, 'player')` is null. Covered by
+  'neither board is interactive on the computer's turn'
+  (interactivity.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/9
