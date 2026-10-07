@@ -1,4 +1,4 @@
-import { DIFFICULTIES, playComputerTurn, type Difficulty } from '../game/ai';
+import { playComputerTurn, type Difficulty } from '../game/ai';
 import { isFleetComplete, shipAt } from '../game/board';
 import { coordKey } from '../game/coord';
 import { createGame, fire, startGame, type GameState } from '../game/game';
@@ -7,6 +7,7 @@ import { FLEET } from '../game/ships';
 import { isShipSunk } from '../game/shots';
 import type { Board, Coord } from '../game/types';
 import { createBoardView, type CellView } from './boardView';
+import { LEVELS, levelName } from './levels';
 import { createFleetTracker } from './fleetTracker';
 import {
   coordLabel,
@@ -28,19 +29,23 @@ import {
 
 const COMPUTER_DELAY_MS = 700;
 
-const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  easy: 'Easy',
-  normal: 'Normal',
-  hard: 'Hard',
-};
-
 const TEMPLATE = `
-  <header class="top">
+  <section class="intro" aria-labelledby="intro-title" data-ref="intro">
+    <h1 id="intro-title" class="intro-title">Welcome to Battleship</h1>
+    <p class="intro-subtitle">Sink the computer's fleet before it sinks yours.</p>
+    <fieldset class="level-picker">
+      <legend class="visually-hidden">Choose a level</legend>
+      <div class="level-cards" data-ref="levelCards"></div>
+    </fieldset>
+    <p class="intro-note">No level can see your ships. Each one only knows its own hits and misses. A good human player usually needs about 50 to 60 shots.</p>
+    <button type="button" class="primary intro-start" data-ref="introStart">Start</button>
+  </section>
+  <header class="top" data-ref="top">
     <h1>Battleship</h1>
     <button type="button" class="secondary" data-ref="newGame" hidden>New game</button>
   </header>
   <p class="status" role="status" aria-live="polite" data-ref="status"></p>
-  <main class="layout">
+  <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
       <h2 id="setup-title">Place your fleet</h2>
       <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Select a placed ship to move it.</p>
@@ -49,10 +54,7 @@ const TEMPLATE = `
         <button type="button" data-ref="rotate">Rotate</button>
         <button type="button" data-ref="randomize">Randomize</button>
       </div>
-      <fieldset class="difficulty">
-        <legend>Difficulty</legend>
-        <div data-ref="difficulty"></div>
-      </fieldset>
+      <p class="level-line">Level: <strong data-ref="levelName"></strong> <button type="button" class="link-button" data-ref="changeLevel">Change</button></p>
       <button type="button" class="primary" data-ref="start">Start battle</button>
     </section>
     <section class="panel" aria-labelledby="enemy-title" data-ref="enemyPanel">
@@ -101,7 +103,13 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     shipList: ref(root, 'shipList'),
     rotate: ref<HTMLButtonElement>(root, 'rotate'),
     randomize: ref<HTMLButtonElement>(root, 'randomize'),
-    difficulty: ref(root, 'difficulty'),
+    intro: ref(root, 'intro'),
+    introStart: ref<HTMLButtonElement>(root, 'introStart'),
+    levelCards: ref(root, 'levelCards'),
+    top: ref(root, 'top'),
+    layout: ref(root, 'layout'),
+    levelName: ref(root, 'levelName'),
+    changeLevel: ref<HTMLButtonElement>(root, 'changeLevel'),
     start: ref<HTMLButtonElement>(root, 'start'),
     enemyPanel: ref(root, 'enemyPanel'),
     endDialog: ref<HTMLDialogElement>(root, 'endDialog'),
@@ -110,6 +118,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
   };
 
+  let screen: 'intro' | 'game' = 'intro';
   let game: GameState = createGame(rng);
   let placement: PlacementState = initialPlacement();
   let difficulty: Difficulty = 'normal';
@@ -149,19 +158,46 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     return { spec, button };
   });
 
-  for (const level of DIFFICULTIES) {
+  for (const { level, name, description, averageShots } of LEVELS) {
     const label = document.createElement('label');
+    label.className = 'level-card';
     const input = document.createElement('input');
     input.type = 'radio';
+    input.className = 'level-input';
     input.name = 'difficulty';
     input.value = level;
     input.checked = level === difficulty;
     input.addEventListener('change', () => {
       difficulty = level;
+      render();
     });
-    label.append(input, ` ${DIFFICULTY_LABELS[level]}`);
-    el.difficulty.append(label);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'level-name';
+    nameEl.textContent = name;
+    const descEl = document.createElement('span');
+    descEl.className = 'level-desc';
+    descEl.textContent = description;
+    const statEl = document.createElement('span');
+    statEl.className = 'level-stat';
+    statEl.textContent = 'About ';
+    const strong = document.createElement('strong');
+    strong.textContent = String(averageShots);
+    statEl.append(strong, ' shots to sink your fleet');
+    label.append(input, nameEl, descEl, statEl);
+    el.levelCards.append(label);
   }
+
+  el.introStart.addEventListener('click', () => {
+    screen = 'game';
+    render();
+    shipButtons[0]?.button.focus();
+  });
+
+  el.changeLevel.addEventListener('click', () => {
+    screen = 'intro';
+    render();
+    el.levelCards.querySelector<HTMLInputElement>('input:checked')?.focus();
+  });
 
   el.rotate.addEventListener('click', () => {
     placement = rotate(placement);
@@ -178,7 +214,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     }
     game = startGame(game, placement.board);
     hover = null;
-    message = `Battle started on ${DIFFICULTY_LABELS[difficulty]}.`;
+    message = `Battle started on ${levelName(difficulty)}.`;
     render();
     enemyView.focus();
   });
@@ -186,7 +222,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   el.playAgain.addEventListener('click', reset);
 
   document.addEventListener('keydown', (event) => {
-    if (game.phase !== 'placing' || event.key.toLowerCase() !== 'r') {
+    if (screen !== 'game' || game.phase !== 'placing' || event.key.toLowerCase() !== 'r') {
       return;
     }
     if (event.ctrlKey || event.metaKey || event.altKey) {
@@ -250,8 +286,8 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const shots = won ? game.computerBoard.shots.size : game.playerBoard.shots.size;
     el.endTitle.textContent = won ? 'You win!' : 'You lose';
     el.endText.textContent = won
-      ? `You sank the enemy fleet in ${shots} shots on ${DIFFICULTY_LABELS[difficulty]}.`
-      : `The computer sank your fleet in ${shots} shots on ${DIFFICULTY_LABELS[difficulty]}.`;
+      ? `You sank the enemy fleet in ${shots} shots on ${levelName(difficulty)}.`
+      : `The computer sank your fleet in ${shots} shots on ${levelName(difficulty)}.`;
     el.endDialog.showModal();
   }
 
@@ -303,8 +339,15 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   }
 
   function render(): void {
+    const intro = screen === 'intro';
     const placing = game.phase === 'placing';
+    root.dataset.screen = intro ? 'intro' : placing ? 'placing' : 'battle';
     root.dataset.phase = placing ? 'placing' : 'battle';
+    el.intro.hidden = !intro;
+    el.top.hidden = intro;
+    el.status.hidden = intro;
+    el.layout.hidden = intro;
+    el.levelName.textContent = levelName(difficulty);
     el.setup.hidden = !placing;
     el.enemyPanel.hidden = placing;
     el.newGame.hidden = placing;

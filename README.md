@@ -58,6 +58,7 @@ The layout separates pure game logic from DOM rendering:
 - `src/ui/app.ts` — mounts the app and wires placement, battle and end screens
 - `src/ui/boardView.ts` — accessible, keyboard-navigable board grid
 - `src/ui/fleetTracker.ts` — afloat/sunk list per side
+- `src/ui/levels.ts` — level names, descriptions and average shots for the intro cards
 - `src/ui/placement.ts` — pure placement state
 - `src/ui/messages.ts` — status and shot message text
 
