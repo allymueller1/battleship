@@ -138,3 +138,21 @@ in self-testing, so that recurring failure modes stay visible.
   orientation' and 'selecting an unplaced ship keeps the current
   orientation' (placement.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/4
+
+### 9. The board was cut off on phones
+
+- **What happened:** On screens narrower than about 470px (most phones),
+  both boards were slightly wider than their panel. Column J and the
+  "Afloat"/"Sunk" labels were cut off at the right edge, and the page could
+  scroll sideways.
+- **How it was found:** Taking "before" screenshots of the live site at
+  phone size (390px, mobile emulation) for the design pass. The PR 4 phone
+  check missed it.
+- **Root cause:** The cell size was `(100vw - 3rem) / 11`, but the page and
+  panel padding add up to 3.5rem, and the 10 gaps between cells (20px) were
+  not counted at all, so the board overflowed by about 28px.
+- **Fix:** Panels are now CSS size containers, and the cell size is worked
+  out from the panel's own width, including the gaps:
+  `min(2.4rem, calc((100cqi - 10 * var(--gap)) / 11))`. Checked from 360px
+  to 1280px wide with no overflow.
+- **PR:** https://github.com/allymueller1/battleship/pull/6
