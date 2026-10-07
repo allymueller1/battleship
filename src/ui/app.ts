@@ -11,6 +11,7 @@ import { LEVELS, levelName } from './levels';
 import { createFleetTracker } from './fleetTracker';
 import {
   coordLabel,
+  endSummary,
   placementMessage,
   rejectionMessage,
   shotMessage,
@@ -68,9 +69,10 @@ const TEMPLATE = `
       <div data-ref="playerTracker"></div>
     </section>
   </main>
-  <dialog class="end" aria-labelledby="end-title" data-ref="endDialog">
+  <dialog class="end" aria-labelledby="end-title" aria-describedby="end-text" data-ref="endDialog">
     <h2 id="end-title" data-ref="endTitle"></h2>
-    <p data-ref="endText"></p>
+    <p id="end-text" class="end-text" data-ref="endText"></p>
+    <dl class="end-stats" data-ref="endStats"></dl>
     <button type="button" class="primary" data-ref="playAgain" autofocus>Play again</button>
   </dialog>
 `;
@@ -115,6 +117,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     endDialog: ref<HTMLDialogElement>(root, 'endDialog'),
     endTitle: ref(root, 'endTitle'),
     endText: ref(root, 'endText'),
+    endStats: ref(root, 'endStats'),
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
   };
 
@@ -282,12 +285,28 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   }
 
   function showEnd(): void {
-    const won = game.winner === 'player';
-    const shots = won ? game.computerBoard.shots.size : game.playerBoard.shots.size;
-    el.endTitle.textContent = won ? 'You win!' : 'You lose';
-    el.endText.textContent = won
-      ? `You sank the enemy fleet in ${shots} shots on ${levelName(difficulty)}.`
-      : `The computer sank your fleet in ${shots} shots on ${levelName(difficulty)}.`;
+    const summary = endSummary(game, levelName(difficulty));
+    el.endTitle.textContent = summary.title;
+    el.endText.textContent = summary.text;
+    el.endStats.replaceChildren(
+      ...[
+        ['Your shots', summary.player.shots],
+        ['Your hits', summary.player.hits],
+        ['Computer shots', summary.computer.shots],
+        ['Computer hits', summary.computer.hits],
+      ].map(([term, value]) => {
+        const item = document.createElement('div');
+        item.className = 'end-stat';
+        const dt = document.createElement('dt');
+        dt.textContent = String(term);
+        const dd = document.createElement('dd');
+        dd.textContent = String(value);
+        item.append(dt, dd);
+        return item;
+      }),
+    );
+    el.endDialog.classList.toggle('end--win', summary.won);
+    el.endDialog.classList.toggle('end--lose', !summary.won);
     el.endDialog.showModal();
   }
 
