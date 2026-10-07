@@ -3,6 +3,8 @@
 Play the classic board game Battleship against a computer opponent in your
 browser, with three difficulty levels to choose from.
 
+![A game in progress: enemy waters on the left, your fleet on the right](docs/screenshot.png)
+
 ## Getting started
 
 Requires Node.js 22 (see `.nvmrc`).
