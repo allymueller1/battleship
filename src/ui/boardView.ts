@@ -129,20 +129,27 @@ export function createBoardView(options: BoardViewOptions): BoardView {
     if (c) {
       active = c;
       syncTabIndex();
-      if (interactive) {
+      if (
+        interactive &&
+        event.target instanceof HTMLButtonElement &&
+        event.target.matches(':focus-visible')
+      ) {
         options.onHover?.(c);
       }
     }
   });
 
-  grid.addEventListener('mouseover', (event) => {
+  grid.addEventListener('pointerover', (event) => {
+    if (event.pointerType === 'touch') {
+      return;
+    }
     const c = coordOf(event.target);
     if (c && interactive) {
       options.onHover?.(c);
     }
   });
 
-  grid.addEventListener('mouseleave', () => options.onHover?.(null));
+  grid.addEventListener('pointerleave', () => options.onHover?.(null));
   grid.addEventListener('focusout', (event) => {
     if (!(event.relatedTarget instanceof Node && grid.contains(event.relatedTarget))) {
       options.onHover?.(null);
