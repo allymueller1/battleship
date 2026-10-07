@@ -43,7 +43,7 @@ fires at the same cell twice.
 
 - TypeScript, strict mode
 - Vite — no UI framework, plain DOM
-- Vitest with v8 coverage, 90% thresholds on `src/game/**` (see `vite.config.ts`)
+- Vitest with v8 coverage, 90% thresholds on the game logic and pure UI modules (see `vite.config.ts`)
 - ESLint + Prettier
 - GitHub Actions + GitHub Pages
 - Inter, self-hosted via `@fontsource-variable/inter`
