@@ -299,6 +299,18 @@ button.primary:hover:not(:disabled) {
   padding: 0.5rem 0;
 }
 
+.status-line {
+  margin: 0;
+}
+
+.status-line + .status-line {
+  margin-top: 0.25rem;
+}
+
+.status-turn {
+  color: var(--muted);
+}
+
 .status {
   min-height: 3.25rem;
   margin: 0.75rem 0 1.25rem;
