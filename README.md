@@ -20,6 +20,8 @@ Play the classic board game Battleship against a computer opponent in your brows
 3. Press **Start battle**, then fire at cells on the **Enemy waters** board.
    A miss is a dot, a hit is a marker, and a sunk ship turns solid red. The
    fleet trackers show which of your ships and the enemy's are still afloat.
+   The status area keeps your last shot and the computer's last shot on
+   separate lines.
 4. When a game ends, the end screen shows the result plus each side's shots
    and hits. **Play again** or **New game** starts over on the same level.
 

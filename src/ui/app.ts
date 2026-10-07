@@ -29,7 +29,8 @@ import {
 } from './placement';
 import { boardInteractivity } from './interactivity';
 
-const COMPUTER_DELAY_MS = 700;
+export const COMPUTER_DELAY_MS = 700;
+export const END_SCREEN_DELAY_MS = 1200;
 
 const TEMPLATE = `
   <section class="intro" aria-labelledby="intro-title" data-ref="intro">
@@ -46,7 +47,11 @@ const TEMPLATE = `
     <h1>Battleship</h1>
     <button type="button" class="secondary" data-ref="newGame" hidden>New game</button>
   </header>
-  <p class="status" role="status" aria-live="polite" data-ref="status"></p>
+  <div class="status" role="status" aria-live="polite" data-ref="status">
+    <p class="status-line" data-ref="playerResult" hidden></p>
+    <p class="status-line" data-ref="computerResult" hidden></p>
+    <p class="status-line status-turn" data-ref="statusTurn"></p>
+  </div>
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
       <h2 id="setup-title">Place your fleet</h2>
@@ -102,6 +107,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   const el = {
     newGame: ref<HTMLButtonElement>(root, 'newGame'),
     status: ref(root, 'status'),
+    playerResult: ref(root, 'playerResult'),
+    computerResult: ref(root, 'computerResult'),
+    statusTurn: ref(root, 'statusTurn'),
     setup: ref(root, 'setup'),
     shipList: ref(root, 'shipList'),
     rotate: ref<HTMLButtonElement>(root, 'rotate'),
@@ -127,8 +135,11 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   let placement: PlacementState = initialPlacement();
   let difficulty: Difficulty = 'normal';
   let hover: Coord | null = null;
-  let message = '';
+  let playerResult = '';
+  let computerResult = '';
+  let note = '';
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
+  let endTimer: ReturnType<typeof setTimeout> | undefined;
   // Recomputed once per render; playerCell/enemyCell close over them.
   let playerSunk = new Set<string>();
   let enemySunk = new Set<string>();
@@ -155,7 +166,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     button.className = 'ship-button';
     button.addEventListener('click', () => {
       placement = selectShip(placement, spec.type);
-      message = '';
+      note = '';
       render();
     });
     el.shipList.append(button);
@@ -209,7 +220,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   });
   el.randomize.addEventListener('click', () => {
     placement = randomizePlacement(placement, rng);
-    message = 'Fleet placed at random. Start the battle, or select a ship to move it.';
+    note = 'Fleet placed at random. Start the battle, or select a ship to move it.';
     render();
   });
   el.start.addEventListener('click', () => {
@@ -218,7 +229,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     }
     game = startGame(game, placement.board);
     hover = null;
-    message = `Battle started on ${levelName(difficulty)}.`;
+    note = `Battle started on ${levelName(difficulty)}.`;
     render();
     enemyView.focus();
   });
@@ -243,13 +254,13 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const picked = placement.selected ? null : pickUpAt(placement, c);
     if (picked) {
       placement = picked;
-      message = '';
+      note = '';
     } else if (shipAt(placement.board, c) && placement.selected) {
-      message = placementMessage('overlap', placement.selected);
+      note = placementMessage('overlap', placement.selected);
     } else {
       const { state, error } = placeSelected(placement, c);
       placement = state;
-      message = error ? placementMessage(error, placement.selected) : '';
+      note = error ? placementMessage(error, placement.selected) : '';
     }
     render();
   }
@@ -257,15 +268,16 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   function onEnemyCell(c: Coord): void {
     const outcome = fire(game, 'player', c);
     if (!outcome.ok) {
-      message = rejectionMessage(outcome.reason, c);
+      note = rejectionMessage(outcome.reason, c);
       render();
       return;
     }
     game = outcome.state;
-    message = shotMessage('player', outcome.result);
+    playerResult = shotMessage('player', outcome.result);
+    note = '';
     render();
     if (game.phase === 'over') {
-      showEnd();
+      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
     } else {
       computerTimer = setTimeout(computerMove, COMPUTER_DELAY_MS);
     }
@@ -278,10 +290,11 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       return;
     }
     game = outcome.state;
-    message = shotMessage('computer', outcome.result);
+    computerResult = shotMessage('computer', outcome.result);
+    note = '';
     render();
     if (game.phase === 'over') {
-      showEnd();
+      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
     }
   }
 
@@ -313,14 +326,18 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
 
   function reset(): void {
     clearTimeout(computerTimer);
+    clearTimeout(endTimer);
     computerTimer = undefined;
+    endTimer = undefined;
     if (el.endDialog.open) {
       el.endDialog.close();
     }
     game = createGame(rng);
     placement = initialPlacement();
     hover = null;
-    message = '';
+    playerResult = '';
+    computerResult = '';
+    note = '';
     render();
     shipButtons[0]?.button.focus();
   }
@@ -372,9 +389,17 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     el.enemyPanel.hidden = placing;
     el.newGame.hidden = placing;
 
-    const status = [message, turnMessage(game)].filter(Boolean).join(' ');
-    if (el.status.textContent !== status) {
-      el.status.textContent = status;
+    if (el.playerResult.textContent !== playerResult) {
+      el.playerResult.textContent = playerResult;
+    }
+    el.playerResult.hidden = !playerResult;
+    if (el.computerResult.textContent !== computerResult) {
+      el.computerResult.textContent = computerResult;
+    }
+    el.computerResult.hidden = !computerResult;
+    const turn = [note, turnMessage(game)].filter(Boolean).join(' ');
+    if (el.statusTurn.textContent !== turn) {
+      el.statusTurn.textContent = turn;
     }
 
     playerSunk = sunkCellKeys(game.playerBoard);
