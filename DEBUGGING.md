@@ -175,3 +175,21 @@ in self-testing, so that recurring failure modes stay visible.
   'neither board is interactive on the computer's turn'
   (interactivity.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/9
+
+### 11. On phones, a red preview covered the ship you had just placed
+
+- **What happened:** On a phone, tapping a cell to place a ship turned that
+  ship red straight away, as if the placement had failed. It was really the
+  next ship's "doesn't fit" preview, drawn where your finger had been, and
+  it stayed there until your next tap.
+- **How it was found:** Devin QA session (scripted browser run against the
+  live site with phone touch emulation). Filed as issue #8 and confirmed
+  with before/after screenshots.
+- **Root cause:** The board took its hover cell from `mouseover` and
+  `focusin`, and browsers fire both on a tap. Touch never sends
+  `mouseleave`, so the hover cell was never cleared.
+- **Fix:** Hover now comes from `pointerover` for mouse and pen only, and
+  from `focusin` only for keyboard focus (`:focus-visible`). The hover
+  highlight in the CSS only applies on devices that can hover
+  (`@media (hover: hover)`).
+- **PR:** https://github.com/allymueller1/battleship/pull/10
