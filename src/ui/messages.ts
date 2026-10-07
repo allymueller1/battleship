@@ -1,6 +1,6 @@
 import type { GameState, MoveRejection, Player } from '../game/game';
 import { getShipSpec } from '../game/ships';
-import type { Coord, ShipType, ShotResult } from '../game/types';
+import type { Board, Coord, ShipType, ShotResult } from '../game/types';
 import type { PlaceError } from './placement';
 
 const COLUMNS = 'ABCDEFGHIJ';
@@ -64,6 +64,47 @@ export function placementMessage(error: PlaceError, type: ShipType | null): stri
     case 'already-placed':
       return `${name} is already on the board.`;
   }
+}
+
+export interface ShotStats {
+  readonly shots: number;
+  readonly hits: number;
+}
+
+export interface EndSummary {
+  readonly won: boolean;
+  readonly title: string;
+  readonly text: string;
+  readonly player: ShotStats;
+  readonly computer: ShotStats;
+}
+
+function shotStats(board: Board): ShotStats {
+  let hits = 0;
+  for (const mark of board.shots.values()) {
+    if (mark === 'hit') {
+      hits++;
+    }
+  }
+  return { shots: board.shots.size, hits };
+}
+
+/** The end-of-game title, text and per-side shot counts for the end dialog. */
+export function endSummary(state: GameState, level: string): EndSummary {
+  if (state.phase !== 'over') {
+    throw new Error(`Cannot summarise a game in phase: ${state.phase}`);
+  }
+  const won = state.winner === 'player';
+  const shots = won ? state.computerBoard.shots.size : state.playerBoard.shots.size;
+  return {
+    won,
+    title: won ? 'You win!' : 'You lose',
+    text: won
+      ? `You sank the enemy fleet in ${shots} shots on ${level}.`
+      : `The computer sank your fleet in ${shots} shots on ${level}.`,
+    player: shotStats(state.computerBoard),
+    computer: shotStats(state.playerBoard),
+  };
 }
 
 export function turnMessage(state: GameState): string {

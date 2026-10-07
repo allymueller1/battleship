@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { placeShip, createBoard } from '../game/board';
-import { createGame } from '../game/game';
+import { createGame, type GameState } from '../game/game';
 import { createRng } from '../game/rng';
+import { fireShot } from '../game/shots';
 import {
   coordLabel,
+  endSummary,
   placementMessage,
   rejectionMessage,
   shotMessage,
@@ -63,6 +65,47 @@ describe('placementMessage', () => {
     expect(placementMessage('overlap', 'cruiser')).toMatch(/Cruiser would overlap/);
     expect(placementMessage('already-placed', 'destroyer')).toMatch(/already on the board/);
     expect(placementMessage('none-selected', null)).toMatch(/All ships are placed/);
+  });
+});
+
+describe('endSummary', () => {
+  const winnerState = (winner: 'player' | 'computer'): GameState => {
+    const computerBoard = [
+      { row: 0, col: 0 }, // hit — destroyer
+      { row: 0, col: 1 }, // hit — destroyer sunk
+      { row: 4, col: 4 }, // miss
+    ].reduce(
+      (b, c) => fireShot(b, c).board,
+      placeShip(createBoard(), 'destroyer', { row: 0, col: 0 }, 'horizontal'),
+    );
+    const playerBoard = [
+      { row: 1, col: 1 }, // miss
+      { row: 3, col: 3 }, // hit — carrier
+    ].reduce(
+      (b, c) => fireShot(b, c).board,
+      placeShip(createBoard(), 'carrier', { row: 3, col: 3 }, 'horizontal'),
+    );
+    return { phase: 'over', turn: 'player', winner, playerBoard, computerBoard };
+  };
+
+  it('summarises a player win with exact stats', () => {
+    const summary = endSummary(winnerState('player'), 'Normal');
+    expect(summary.won).toBe(true);
+    expect(summary.title).toBe('You win!');
+    expect(summary.text).toBe('You sank the enemy fleet in 3 shots on Normal.');
+    expect(summary.player).toEqual({ shots: 3, hits: 2 });
+    expect(summary.computer).toEqual({ shots: 2, hits: 1 });
+  });
+
+  it('summarises a computer win', () => {
+    const summary = endSummary(winnerState('computer'), 'Hard');
+    expect(summary.won).toBe(false);
+    expect(summary.title).toBe('You lose');
+    expect(summary.text).toBe('The computer sank your fleet in 2 shots on Hard.');
+  });
+
+  it('throws while the game is not over', () => {
+    expect(() => endSummary(createGame(createRng(1)), 'Easy')).toThrow(/phase/);
   });
 });
 
