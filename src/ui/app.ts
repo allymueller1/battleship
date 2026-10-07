@@ -30,6 +30,7 @@ import {
 import { boardInteractivity } from './interactivity';
 
 export const COMPUTER_DELAY_MS = 700;
+export const END_SCREEN_DELAY_MS = 1200;
 
 const TEMPLATE = `
   <section class="intro" aria-labelledby="intro-title" data-ref="intro">
@@ -138,6 +139,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   let computerResult = '';
   let note = '';
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
+  let endTimer: ReturnType<typeof setTimeout> | undefined;
   // Recomputed once per render; playerCell/enemyCell close over them.
   let playerSunk = new Set<string>();
   let enemySunk = new Set<string>();
@@ -275,7 +277,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     note = '';
     render();
     if (game.phase === 'over') {
-      showEnd();
+      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
     } else {
       computerTimer = setTimeout(computerMove, COMPUTER_DELAY_MS);
     }
@@ -292,7 +294,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     note = '';
     render();
     if (game.phase === 'over') {
-      showEnd();
+      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
     }
   }
 
@@ -324,7 +326,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
 
   function reset(): void {
     clearTimeout(computerTimer);
+    clearTimeout(endTimer);
     computerTimer = undefined;
+    endTimer = undefined;
     if (el.endDialog.open) {
       el.endDialog.close();
     }

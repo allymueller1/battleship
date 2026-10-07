@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../game/rng';
-import { COMPUTER_DELAY_MS, mountApp } from './app';
+import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp } from './app';
 
 // jsdom lacks HTMLDialogElement.showModal/close — stub them to track `open`.
 HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -37,6 +37,26 @@ function enemyCell(root: HTMLElement, row: number, col: number): HTMLButtonEleme
   )!;
 }
 
+function isOver(root: HTMLElement): boolean {
+  const text = statusText(root);
+  return text.includes('You win!') || text.includes('You lose');
+}
+
+function playUntilOver(root: HTMLElement): void {
+  outer: for (let row = 0; row < 10; row++) {
+    for (let col = 0; col < 10; col++) {
+      enemyCell(root, row, col).click();
+      if (isOver(root)) {
+        break outer;
+      }
+      vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+      if (isOver(root)) {
+        break outer;
+      }
+    }
+  }
+}
+
 describe('status lines', () => {
   let root: HTMLElement;
   beforeEach(() => {
@@ -69,5 +89,27 @@ describe('status lines', () => {
     expect(statusText(root)).toContain('You fired at A1');
     expect(ref(root, 'playerResult').textContent).toBe(before);
     expect(ref(root, 'statusTurn').textContent).toContain('You already fired at A1');
+  });
+
+  it('pauses before opening the end screen', () => {
+    playUntilOver(root);
+    expect(isOver(root)).toBe(true);
+
+    const dialog = ref<HTMLDialogElement>(root, 'endDialog');
+    expect(dialog.open).toBe(false);
+    vi.advanceTimersByTime(END_SCREEN_DELAY_MS - 1);
+    expect(dialog.open).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(dialog.open).toBe(true);
+  });
+
+  it('New game during the end pause keeps the dialog closed', () => {
+    playUntilOver(root);
+    expect(isOver(root)).toBe(true);
+
+    ref<HTMLButtonElement>(root, 'newGame').click();
+    vi.advanceTimersByTime(2000);
+    expect(ref<HTMLDialogElement>(root, 'endDialog').open).toBe(false);
+    expect(root.dataset.screen).toBe('placing');
   });
 });
