@@ -558,6 +558,9 @@ button.primary:hover:not(:disabled) {
 }
 
 .end-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: 0.75rem;
   border-radius: 0.75rem;
   background: rgb(148 180 220 / 8%);
