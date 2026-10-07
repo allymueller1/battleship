@@ -193,3 +193,35 @@ in self-testing, so that recurring failure modes stay visible.
   highlight in the CSS only applies on devices that can hover
   (`@media (hover: hover)`).
 - **PR:** https://github.com/allymueller1/battleship/pull/10
+
+### 12. Your shot result vanished the moment the computer fired
+
+- **What happened:** As soon as you fired, the status line showed your
+  result — but about 700 ms later the computer's shot overwrote it, so a
+  line like `You fired at B4: hit! You sank the computer's Carrier.` was
+  easy to miss. The same thing happened the other way round: a note like
+  "You already fired at A1" replaced the computer's last result.
+- **How it was found:** reported by Ally after playtesting.
+- **Root cause:** A single `message` variable fed the whole status area.
+  Every event — your shot, the computer's shot, a rejected click —
+  overwrote it.
+- **Fix:** The status area now has separate lines for your last shot, the
+  computer's last shot, and the current note/turn prompt. Covered by
+  "keeps the player's shot result after the computer answers" and "a
+  rejection note does not replace the last shot result" (app.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/12
+
+### 13. The end screen appeared the instant the last ship sank
+
+- **What happened:** The moment your final shot sank the last ship, the
+  end dialog popped open over the board. It felt abrupt and you never got
+  to look at the finished board.
+- **How it was found:** reported by Ally after playtesting.
+- **Root cause:** `showEnd()` ran synchronously inside the shot handler,
+  so the dialog opened before the last hit marker had even settled.
+- **Fix:** When a move ends the game, the dialog now waits
+  `END_SCREEN_DELAY_MS` (1.2 s) before opening. Starting a new game during
+  the pause cancels it. Covered by "pauses before opening the end screen"
+  and "New game during the end pause keeps the dialog closed"
+  (app.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/12
