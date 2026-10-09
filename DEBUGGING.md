@@ -238,3 +238,60 @@ in self-testing, so that recurring failure modes stay visible.
 - **Fix:** `isolation: isolate` on `#app`, so the starfield's -1 stays
   inside `#app`, above the body background and below the content.
 - **PR:** https://github.com/allymueller1/battleship/pull/13
+
+### 15. A win in one tab erased wins saved in another
+
+- **What happened:** With the game open in two tabs, a win saved in one
+  tab disappeared after the other tab finished a game.
+- **How it was found:** Devin Review on PR 14.
+- **Root cause:** The leaderboard was loaded once when the page mounted
+  and written back in full on every win, so a stale copy overwrote
+  anything another tab saved in between.
+- **Fix:** The leaderboard reloads from storage at the moment a win is
+  saved, and again when a `storage` event says another tab changed it.
+  Covered by "keeps wins another tab saved while this one played" and
+  "reloads the leaderboard when another tab changes it" (app.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/14
+
+### 16. A drag left running could drop a ship on the new layout
+
+- **What happened:** If you pressed Randomize (or picked another ship,
+  or tapped the board) while dragging a ship, letting go afterwards
+  could place the ship on the new layout or throw an error.
+- **How it was found:** Devin Review on PR 14.
+- **Root cause:** The app's drag state survived actions that replaced
+  the placement board, and a late `pointerup` then dropped the ship
+  against the wrong board. `dropDrag` also trusted its snap-back spot
+  to still be free and could throw on the overlap.
+- **Fix:** Every board-changing action now cancels a live drag first,
+  and `dropDrag` never throws: a ship already placed is a no-op, and a
+  blocked snap-back spot leaves the ship selected and unplaced.
+  Covered by "cancels the drag so a late pointerup does nothing"
+  (app.test.ts) and the `dropDrag` defensive cases (placement.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/14
+
+### 17. Saved wins were dated in UTC, not local time
+
+- **What happened:** A win scored late in the evening in the Americas
+  was listed under the next day's date.
+- **How it was found:** Devin Review on PR 14.
+- **Root cause:** The score date came from `toISOString().slice(0, 10)`,
+  which is UTC; local days can differ by a day either way.
+- **Fix:** `localDateString()` builds the `YYYY-MM-DD` date from local
+  `getFullYear`/`getMonth`/`getDate`. Covered by "dates a win in local
+  time, not UTC" (app.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/14
+
+### 18. Scores vanished on screen when clearing them failed
+
+- **What happened:** In a browser that refuses `removeItem`, Clear
+  scores hid the leaderboard even though the scores were still saved.
+- **How it was found:** Devin Review on PR 14.
+- **Root cause:** The clear handler emptied the in-memory leaderboard
+  and re-rendered without checking whether storage had actually been
+  cleared.
+- **Fix:** `clearLeaderboard` returns whether clearing worked. On
+  failure the list stays and a message says the scores couldn't be
+  cleared. Covered by "keeps scores listed and says so when clearing
+  fails" (app.test.ts).
+- **PR:** https://github.com/allymueller1/battleship/pull/14
