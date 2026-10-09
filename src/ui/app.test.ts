@@ -170,3 +170,132 @@ describe('effects with reduced motion', () => {
     reduced.remove();
   });
 });
+
+describe('dragging a placed ship', () => {
+  function setupPlacing(): HTMLElement {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountApp(root, createRng(7));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+    root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+    return root;
+  }
+
+  interface C {
+    row: number;
+    col: number;
+  }
+
+  const key = (c: C) => `${c.row},${c.col}`;
+
+  function playerCell(root: HTMLElement, row: number, col: number): HTMLButtonElement {
+    return root.querySelector<HTMLButtonElement>(
+      `[data-ref="playerBoard"] .cell[data-row="${row}"][data-col="${col}"]`,
+    )!;
+  }
+
+  interface ShipSprite {
+    type: string;
+    origin: C;
+    horizontal: boolean;
+    length: number;
+  }
+
+  /** Every placed ship, read from the rendered ship-sprite overlays. */
+  function placedShips(root: HTMLElement): ShipSprite[] {
+    return Array.from(
+      root.querySelectorAll<HTMLElement>('[data-ref="playerBoard"] .ship-sprite'),
+    ).map((el) => ({
+      type: Array.from(el.classList)
+        .find(
+          (c) =>
+            c.startsWith('ship-sprite--') &&
+            c !== 'ship-sprite--horizontal' &&
+            c !== 'ship-sprite--vertical',
+        )!
+        .replace('ship-sprite--', ''),
+      origin: {
+        row: Number(el.style.getPropertyValue('--row')),
+        col: Number(el.style.getPropertyValue('--col')),
+      },
+      horizontal: el.classList.contains('ship-sprite--horizontal'),
+      length: Number(el.style.getPropertyValue('--len')),
+    }));
+  }
+
+  function spriteCells(ship: ShipSprite, origin: C = ship.origin): C[] {
+    return Array.from({ length: ship.length }, (_, i) =>
+      ship.horizontal
+        ? { row: origin.row, col: origin.col + i }
+        : { row: origin.row + i, col: origin.col },
+    );
+  }
+
+  function pointer(type: string, x: number, y: number): MouseEvent {
+    const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
+    Object.defineProperty(e, 'pointerId', { value: 1 });
+    Object.defineProperty(e, 'isPrimary', { value: true });
+    return e;
+  }
+
+  function dragShip(root: HTMLElement, from: C, to: C): void {
+    const grid = root.querySelector('[data-ref="playerBoard"] [role="grid"]')!;
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => playerCell(root, to.row, to.col);
+    try {
+      playerCell(root, from.row, from.col).dispatchEvent(pointer('pointerdown', 0, 0));
+      grid.dispatchEvent(pointer('pointermove', 10, 10));
+      grid.dispatchEvent(pointer('pointerup', 10, 10));
+    } finally {
+      document.elementFromPoint = original;
+    }
+  }
+
+  it('moves a ship to a valid spot and snaps back onto an overlap', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ship = placedShips(root)[0]!;
+      const occupied = new Set(
+        placedShips(root)
+          .flatMap((s) => spriteCells(s))
+          .map(key),
+      );
+
+      // Find an empty origin the ship fits at.
+      let dest: C | null = null;
+      outer: for (let row = 0; row < 10; row++) {
+        for (let col = 0; col < 10; col++) {
+          const target = spriteCells(ship, { row, col });
+          if (target.every((c) => c.row < 10 && c.col < 10 && !occupied.has(key(c)))) {
+            dest = { row, col };
+            break outer;
+          }
+        }
+      }
+      expect(dest).not.toBeNull();
+
+      // Grab the origin cell (grab index 0) and drag it to the new origin.
+      dragShip(root, ship.origin, dest!);
+      for (const c of spriteCells(ship, dest!)) {
+        expect(playerCell(root, c.row, c.col).className).toContain('ship');
+      }
+
+      // Drag it onto another ship: it snaps back and a note explains why.
+      const moved = placedShips(root).find((s) => s.type === ship.type)!;
+      const other = placedShips(root).find((s) => s.type !== ship.type)!;
+      dragShip(root, moved.origin, other.origin);
+      for (const c of spriteCells(ship, dest!)) {
+        expect(playerCell(root, c.row, c.col).className).toContain('ship');
+      }
+      expect(root.querySelector('[data-ref="statusTurn"]')!.textContent).toContain(
+        "didn't fit there, so it went back",
+      );
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});

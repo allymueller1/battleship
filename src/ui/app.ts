@@ -19,6 +19,8 @@ import {
   turnMessage,
 } from './messages';
 import {
+  dragOrigin,
+  dropDrag,
   initialPlacement,
   pickUpAt,
   placeSelected,
@@ -26,6 +28,8 @@ import {
   randomizePlacement,
   rotate,
   selectShip,
+  startDrag,
+  type Drag,
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
@@ -68,7 +72,7 @@ const TEMPLATE = `
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
       <h2 id="setup-title">Deploy your fleet</h2>
-      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Select a placed ship to move it.</p>
+      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Drag a placed ship to move it, or select it and choose a new cell.</p>
       <div class="ship-list" role="group" aria-label="Ships" data-ref="shipList"></div>
       <div class="controls">
         <button type="button" data-ref="rotate">Rotate</button>
@@ -175,6 +179,7 @@ export function mountApp(
   let playerResult = '';
   let computerResult = '';
   let note = '';
+  let drag: Drag | null = null;
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
   let shakeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -186,8 +191,56 @@ export function mountApp(
     label: 'Your fleet',
     onActivate: onPlayerCell,
     onHover: (c) => {
+      if (drag) {
+        return;
+      }
       hover = c;
       render();
+    },
+    drag: {
+      canStart: (c) => game.phase === 'placing' && shipAt(placement.board, c) !== undefined,
+      onStart: (c) => {
+        const started = startDrag(placement, c);
+        if (!started) {
+          return;
+        }
+        placement = started.state;
+        drag = started.drag;
+        hover = c;
+        render();
+      },
+      onMove: (c) => {
+        if (!drag) {
+          return;
+        }
+        hover = c ? dragOrigin(drag, c, placement.orientation) : null;
+        render();
+      },
+      onEnd: (c) => {
+        if (!drag) {
+          return;
+        }
+        const origin = c ? dragOrigin(drag, c, placement.orientation) : null;
+        const dropped = dropDrag(placement, drag, origin);
+        placement = dropped.state;
+        note = dropped.snappedBack
+          ? `The ${shipDisplayName(drag.type)} didn't fit there, so it went back.`
+          : '';
+        drag = null;
+        hover = null;
+        render();
+      },
+      onCancel: () => {
+        if (!drag) {
+          return;
+        }
+        const dropped = dropDrag(placement, drag, null);
+        placement = dropped.state;
+        note = `The ${shipDisplayName(drag.type)} didn't fit there, so it went back.`;
+        drag = null;
+        hover = null;
+        render();
+      },
     },
   });
   const enemyView = createBoardView({ label: 'Enemy sector', onActivate: onEnemyCell });
@@ -403,6 +456,7 @@ export function mountApp(
     game = createGame(rng);
     placement = initialPlacement();
     hover = null;
+    drag = null;
     playerResult = '';
     computerResult = '';
     note = '';

@@ -72,6 +72,65 @@ export function placeSelected(
   return { state: { ...state, board, selected: nextUnplaced(board) }, error: null };
 }
 
+/** A ship being dragged: where it came from and which cell was grabbed. */
+export interface Drag {
+  readonly type: ShipType;
+  readonly from: Coord;
+  readonly orientation: Orientation;
+  readonly grab: number;
+}
+
+/** Picks up the ship under `coord` and remembers where it was grabbed, or null on an empty cell. */
+export function startDrag(
+  state: PlacementState,
+  coord: Coord,
+): { state: PlacementState; drag: Drag } | null {
+  const ship = shipAt(state.board, coord);
+  if (!ship) {
+    return null;
+  }
+  const grab = ship.cells.findIndex((c) => c.row === coord.row && c.col === coord.col);
+  if (grab < 0) {
+    return null;
+  }
+  return {
+    state: selectShip(state, ship.type),
+    drag: { type: ship.type, from: ship.origin, orientation: ship.orientation, grab },
+  };
+}
+
+/** The origin that keeps the grabbed cell under the pointer. */
+export function dragOrigin(drag: Drag, pointer: Coord, orientation: Orientation): Coord {
+  return orientation === 'horizontal'
+    ? { row: pointer.row, col: pointer.col - drag.grab }
+    : { row: pointer.row - drag.grab, col: pointer.col };
+}
+
+/**
+ * Places the dragged ship at `origin` if it fits; otherwise (invalid or null)
+ * puts it back where it came from.
+ */
+export function dropDrag(
+  state: PlacementState,
+  drag: Drag,
+  origin: Coord | null,
+): { state: PlacementState; snappedBack: boolean } {
+  if (origin && validatePlacement(state.board, drag.type, origin, state.orientation) === null) {
+    const board = placeShip(state.board, drag.type, origin, state.orientation);
+    return { state: { ...state, board, selected: nextUnplaced(board) }, snappedBack: false };
+  }
+  const board = placeShip(state.board, drag.type, drag.from, drag.orientation);
+  return {
+    state: {
+      ...state,
+      board,
+      selected: nextUnplaced(board),
+      orientation: drag.orientation,
+    },
+    snappedBack: true,
+  };
+}
+
 export function randomizePlacement(state: PlacementState, rng: Rng): PlacementState {
   return { ...state, board: randomFleet(rng), selected: null };
 }

@@ -1162,3 +1162,8 @@ button.primary:hover:not(:disabled) {
     opacity: 0;
   }
 }
+
+/* Let touch drag a placed ship without the browser hijacking the gesture to scroll. */
+[data-phase='placing'] [data-ref='playerBoard'] .cell.ship {
+  touch-action: none;
+}

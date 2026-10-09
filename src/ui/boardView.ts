@@ -7,10 +7,19 @@ export interface CellView {
   readonly label: string;
 }
 
+export interface DragHandlers {
+  canStart(coord: Coord): boolean;
+  onStart(coord: Coord): void;
+  onMove(coord: Coord | null): void;
+  onEnd(coord: Coord | null): void;
+  onCancel(): void;
+}
+
 export interface BoardViewOptions {
   readonly label: string;
   readonly onActivate: (coord: Coord) => void;
   readonly onHover?: (coord: Coord | null) => void;
+  readonly drag?: DragHandlers;
 }
 
 export interface ShipSprite {
@@ -41,6 +50,10 @@ const MOVES: Record<string, (c: Coord) => Coord> = {
   Home: (c) => ({ row: c.row, col: 0 }),
   End: (c) => ({ row: c.row, col: BOARD_SIZE - 1 }),
 };
+
+function sameCoord(a: Coord, b: Coord): boolean {
+  return a.row === b.row && a.col === b.col;
+}
 
 function clamp(n: number): number {
   return Math.min(BOARD_SIZE - 1, Math.max(0, n));
@@ -181,6 +194,105 @@ export function createBoardView(options: BoardViewOptions): BoardView {
 
   let shipKey = '';
   const fxTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  if (options.drag) {
+    const handlers = options.drag;
+    let pointerId: number | null = null;
+    let startCell: Coord | null = null;
+    let lastCell: Coord | null = null;
+    let dragging = false;
+    // Set briefly after a drop so the click that ends a drag can't also activate
+    // a cell, while a later real tap still can.
+    let suppressClick = false;
+
+    grid.addEventListener(
+      'click',
+      (event) => {
+        if (suppressClick) {
+          event.stopPropagation();
+        }
+      },
+      { capture: true },
+    );
+
+    const cellFromPoint = (x: number, y: number): Coord | null => {
+      const el = document.elementFromPoint?.(x, y)?.closest<HTMLElement>('.cell');
+      if (!el || !grid.contains(el)) {
+        return null;
+      }
+      return { row: Number(el.dataset.row), col: Number(el.dataset.col) };
+    };
+
+    const resetDrag = (): void => {
+      pointerId = null;
+      startCell = null;
+      lastCell = null;
+      dragging = false;
+      grid.classList.remove('board--dragging');
+    };
+
+    grid.addEventListener('pointerdown', (event) => {
+      if (!interactive || event.button !== 0 || event.isPrimary === false) {
+        return;
+      }
+      const c = coordOf(event.target);
+      if (!c || !handlers.canStart(c)) {
+        return;
+      }
+      pointerId = event.pointerId;
+      startCell = c;
+      lastCell = c;
+    });
+
+    grid.addEventListener('pointermove', (event) => {
+      if (pointerId === null || event.pointerId !== pointerId || !startCell) {
+        return;
+      }
+      const c = cellFromPoint(event.clientX, event.clientY);
+      if (!dragging) {
+        if (c && sameCoord(c, startCell)) {
+          return;
+        }
+        dragging = true;
+        grid.classList.add('board--dragging');
+        grid.setPointerCapture?.(pointerId);
+        handlers.onStart(startCell);
+        handlers.onMove(c);
+        lastCell = c;
+        return;
+      }
+      if ((c === null) !== (lastCell === null) || (c && lastCell && !sameCoord(c, lastCell))) {
+        lastCell = c;
+        handlers.onMove(c);
+      }
+    });
+
+    grid.addEventListener('pointerup', (event) => {
+      if (pointerId === null || event.pointerId !== pointerId) {
+        return;
+      }
+      if (dragging) {
+        handlers.onEnd(cellFromPoint(event.clientX, event.clientY));
+        suppressClick = true;
+        // The synthetic click lands in the same input task as this pointerup, so
+        // the flag clears only after that click has had its chance to run.
+        setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+      }
+      resetDrag();
+    });
+
+    grid.addEventListener('pointercancel', (event) => {
+      if (pointerId === null || event.pointerId !== pointerId) {
+        return;
+      }
+      if (dragging) {
+        handlers.onCancel();
+      }
+      resetDrag();
+    });
+  }
 
   syncTabIndex();
 
