@@ -5,7 +5,7 @@ import { createGame, fire, startGame, type GameState } from '../game/game';
 import type { Rng } from '../game/rng';
 import { FLEET, getShipSpec } from '../game/ships';
 import { isShipSunk } from '../game/shots';
-import type { Board, Coord, PlacedShip } from '../game/types';
+import type { Board, Coord, PlacedShip, ShotResult } from '../game/types';
 import { createBoardView, type CellView, type ShipSprite } from './boardView';
 import { shipSvg } from './shipArt';
 import { LEVELS, levelName } from './levels';
@@ -29,6 +29,7 @@ import {
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
+import { effectForShot, SHAKE_MS, VICTORY_DELAY_MS } from './effects';
 import { shipDisplayName } from './theme';
 import { BRIEFING_LINES, createTitleScreen } from './titleScreen';
 
@@ -176,6 +177,7 @@ export function mountApp(
   let note = '';
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
+  let shakeTimer: ReturnType<typeof setTimeout> | undefined;
   // Recomputed once per render; playerCell/enemyCell close over them.
   let playerSunk = new Set<string>();
   let enemySunk = new Set<string>();
@@ -318,8 +320,9 @@ export function mountApp(
     playerResult = shotMessage('player', outcome.result);
     note = '';
     render();
+    afterShot(enemyView, outcome.result);
     if (game.phase === 'over') {
-      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
+      scheduleEnd();
     } else {
       computerTimer = setTimeout(computerMove, COMPUTER_DELAY_MS);
     }
@@ -335,9 +338,26 @@ export function mountApp(
     computerResult = shotMessage('computer', outcome.result);
     note = '';
     render();
+    afterShot(playerView, outcome.result);
     if (game.phase === 'over') {
-      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
+      scheduleEnd();
     }
+  }
+
+  function afterShot(view: typeof enemyView, result: ShotResult): void {
+    const fx = effectForShot(result);
+    view.spawnEffect(fx.kind, fx.cells, !reducedMotion());
+    if (fx.kind === 'sunk' && !reducedMotion()) {
+      root.classList.add('shake');
+      clearTimeout(shakeTimer);
+      shakeTimer = setTimeout(() => root.classList.remove('shake'), SHAKE_MS);
+    }
+  }
+
+  function scheduleEnd(): void {
+    const won = game.winner === 'player';
+    root.classList.add(won ? 'fx-victory' : 'fx-defeat');
+    endTimer = setTimeout(showEnd, won ? VICTORY_DELAY_MS : END_SCREEN_DELAY_MS);
   }
 
   function showEnd(): void {
@@ -370,8 +390,13 @@ export function mountApp(
     titleScreen.stop();
     clearTimeout(computerTimer);
     clearTimeout(endTimer);
+    clearTimeout(shakeTimer);
     computerTimer = undefined;
     endTimer = undefined;
+    shakeTimer = undefined;
+    playerView.clearEffects();
+    enemyView.clearEffects();
+    root.classList.remove('shake', 'fx-victory', 'fx-defeat');
     if (el.endDialog.open) {
       el.endDialog.close();
     }

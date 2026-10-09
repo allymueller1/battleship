@@ -1,5 +1,6 @@
 import { BOARD_SIZE, type Coord, type Orientation, type ShipType } from '../game/types';
 import { shipSvg } from './shipArt';
+import { FX_LIFETIME_MS, type EffectKind } from './effects';
 
 export interface CellView {
   readonly classes: readonly string[];
@@ -25,6 +26,8 @@ export interface BoardView {
   update(cell: (coord: Coord) => CellView): void;
   setInteractive(interactive: boolean): void;
   setShips(ships: readonly ShipSprite[]): void;
+  spawnEffect(kind: EffectKind, cells: readonly Coord[], particles: boolean): void;
+  clearEffects(): void;
   focus(): void;
 }
 
@@ -177,6 +180,7 @@ export function createBoardView(options: BoardViewOptions): BoardView {
   wrap.append(grid, shipLayer, fxLayer);
 
   let shipKey = '';
+  let fxTimers: ReturnType<typeof setTimeout>[] = [];
 
   syncTabIndex();
 
@@ -216,6 +220,32 @@ export function createBoardView(options: BoardViewOptions): BoardView {
           return el;
         }),
       );
+    },
+    spawnEffect(kind, cells, particles) {
+      const sparks = kind === 'hit' ? 6 : kind === 'sunk' ? 8 : 0;
+      for (const c of cells) {
+        const fx = document.createElement('span');
+        fx.className = `fx fx--${kind}`;
+        fx.style.setProperty('--row', String(c.row));
+        fx.style.setProperty('--col', String(c.col));
+        if (particles) {
+          for (let k = 0; k < sparks; k++) {
+            const spark = document.createElement('i');
+            spark.className = 'spark';
+            spark.style.setProperty('--i', String(k));
+            fx.append(spark);
+          }
+        }
+        fxLayer.append(fx);
+        fxTimers.push(setTimeout(() => fx.remove(), FX_LIFETIME_MS));
+      }
+    },
+    clearEffects() {
+      for (const timer of fxTimers) {
+        clearTimeout(timer);
+      }
+      fxTimers = [];
+      fxLayer.replaceChildren();
     },
     setInteractive(on) {
       interactive = on;

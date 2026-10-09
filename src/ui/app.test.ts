@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../game/rng';
-import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp } from './app';
+import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp, type MountOptions } from './app';
+import { SHAKE_MS, VICTORY_DELAY_MS } from './effects';
 
 // jsdom lacks HTMLDialogElement.showModal/close — stub them to track `open`.
 HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -11,10 +12,10 @@ HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) {
   this.open = false;
 };
 
-function setup(): HTMLElement {
+function setup(options: MountOptions = {}): HTMLElement {
   const root = document.createElement('div');
   document.body.append(root);
-  mountApp(root, createRng(7));
+  mountApp(root, createRng(7), options);
 
   // title -> mission select -> placement -> battle
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
@@ -42,6 +43,10 @@ function enemyCell(root: HTMLElement, row: number, col: number): HTMLButtonEleme
 function isOver(root: HTMLElement): boolean {
   const text = statusText(root);
   return text.includes('Victory!') || text.includes('Defeat');
+}
+
+function endDelay(root: HTMLElement): number {
+  return statusText(root).includes('Victory!') ? VICTORY_DELAY_MS : END_SCREEN_DELAY_MS;
 }
 
 function playUntilOver(root: HTMLElement): void {
@@ -99,7 +104,7 @@ describe('status lines', () => {
 
     const dialog = ref<HTMLDialogElement>(root, 'endDialog');
     expect(dialog.open).toBe(false);
-    vi.advanceTimersByTime(END_SCREEN_DELAY_MS - 1);
+    vi.advanceTimersByTime(endDelay(root) - 1);
     expect(dialog.open).toBe(false);
     vi.advanceTimersByTime(1);
     expect(dialog.open).toBe(true);
@@ -113,5 +118,55 @@ describe('status lines', () => {
     vi.advanceTimersByTime(2000);
     expect(ref<HTMLDialogElement>(root, 'endDialog').open).toBe(false);
     expect(root.dataset.screen).toBe('placing');
+  });
+
+  it('a destroyed ship shakes the board, unless reduced motion is on', () => {
+    const strikeUntilDestroyed = () => {
+      outer: for (let row = 0; row < 10; row++) {
+        for (let col = 0; col < 10; col++) {
+          enemyCell(root, row, col).click();
+          if (ref(root, 'playerResult').textContent?.includes('destroyed')) {
+            break outer;
+          }
+          vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+        }
+      }
+    };
+
+    strikeUntilDestroyed();
+    expect(ref(root, 'playerResult').textContent).toContain('destroyed');
+    expect(root.classList.contains('shake')).toBe(true);
+    vi.advanceTimersByTime(SHAKE_MS);
+    expect(root.classList.contains('shake')).toBe(false);
+  });
+
+  it('marks the end of the game with a victory or defeat class', () => {
+    playUntilOver(root);
+    const won = statusText(root).includes('Victory!');
+    expect(root.classList.contains(won ? 'fx-victory' : 'fx-defeat')).toBe(true);
+
+    ref<HTMLButtonElement>(root, 'newGame').click();
+    expect(root.classList.contains('fx-victory')).toBe(false);
+    expect(root.classList.contains('fx-defeat')).toBe(false);
+  });
+});
+
+describe('effects with reduced motion', () => {
+  it('does not shake on a destroyed ship', () => {
+    vi.useFakeTimers();
+    const reduced = setup({ reducedMotion: () => true });
+    outer: for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        enemyCell(reduced, row, col).click();
+        if (ref(reduced, 'playerResult').textContent?.includes('destroyed')) {
+          break outer;
+        }
+        vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+      }
+    }
+    expect(ref(reduced, 'playerResult').textContent).toContain('destroyed');
+    expect(reduced.classList.contains('shake')).toBe(false);
+    vi.useRealTimers();
+    reduced.remove();
   });
 });
