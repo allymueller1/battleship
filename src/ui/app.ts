@@ -29,11 +29,21 @@ import {
 } from './placement';
 import { boardInteractivity } from './interactivity';
 import { shipDisplayName } from './theme';
+import { BRIEFING_LINES, createTitleScreen } from './titleScreen';
 
 export const COMPUTER_DELAY_MS = 700;
 export const END_SCREEN_DELAY_MS = 1200;
 
 const TEMPLATE = `
+  <div class="starfield" aria-hidden="true"><div class="stars stars--far"></div><div class="stars stars--near"></div></div>
+  <section class="title-screen" data-ref="title">
+    <h1 class="title-logo">Nebula Strike</h1>
+    <p class="visually-hidden">${BRIEFING_LINES.join(' ')}</p>
+    <div class="briefing" data-ref="briefing" aria-hidden="true">
+      ${BRIEFING_LINES.map(() => '<p class="briefing-line"></p>').join('')}
+    </div>
+    <button type="button" class="primary launch" data-ref="launch" hidden>Launch</button>
+  </section>
   <section class="intro" aria-labelledby="intro-title" data-ref="intro">
     <h1 id="intro-title" class="intro-title">Choose your mission</h1>
     <p class="intro-subtitle">Destroy the enemy fleet before it destroys yours.</p>
@@ -102,8 +112,19 @@ function sunkCellKeys(board: Board): Set<string> {
   return keys;
 }
 
+export interface MountOptions {
+  readonly reducedMotion?: () => boolean;
+}
+
 /** Wires the pure game logic to the DOM. `rng` is injectable so tests can seed it. */
-export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
+export function mountApp(
+  root: HTMLElement,
+  rng: Rng = Math.random,
+  options: MountOptions = {},
+): void {
+  const reducedMotion =
+    options.reducedMotion ??
+    (() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   root.innerHTML = TEMPLATE;
   const el = {
     newGame: ref<HTMLButtonElement>(root, 'newGame'),
@@ -115,6 +136,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     shipList: ref(root, 'shipList'),
     rotate: ref<HTMLButtonElement>(root, 'rotate'),
     randomize: ref<HTMLButtonElement>(root, 'randomize'),
+    title: ref(root, 'title'),
+    briefing: ref(root, 'briefing'),
+    launch: ref<HTMLButtonElement>(root, 'launch'),
     intro: ref(root, 'intro'),
     introStart: ref<HTMLButtonElement>(root, 'introStart'),
     levelCards: ref(root, 'levelCards'),
@@ -131,7 +155,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
   };
 
-  let screen: 'intro' | 'game' = 'intro';
+  let screen: 'title' | 'intro' | 'game' = 'title';
   let game: GameState = createGame(rng);
   let placement: PlacementState = initialPlacement();
   let difficulty: Difficulty = 'normal';
@@ -326,6 +350,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   }
 
   function reset(): void {
+    titleScreen.stop();
     clearTimeout(computerTimer);
     clearTimeout(endTimer);
     computerTimer = undefined;
@@ -379,12 +404,14 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   function render(): void {
     const intro = screen === 'intro';
     const placing = game.phase === 'placing';
-    root.dataset.screen = intro ? 'intro' : placing ? 'placing' : 'battle';
+    root.dataset.screen =
+      screen === 'title' ? 'title' : intro ? 'intro' : placing ? 'placing' : 'battle';
     root.dataset.phase = placing ? 'placing' : 'battle';
+    el.title.hidden = screen !== 'title';
     el.intro.hidden = !intro;
-    el.top.hidden = intro;
-    el.status.hidden = intro;
-    el.layout.hidden = intro;
+    el.top.hidden = screen !== 'game';
+    el.status.hidden = screen !== 'game';
+    el.layout.hidden = screen !== 'game';
     el.levelName.textContent = levelName(difficulty);
     el.setup.hidden = !placing;
     el.enemyPanel.hidden = placing;
@@ -429,6 +456,18 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     el.rotate.textContent = `Rotate (${placement.orientation})`;
     el.start.disabled = !isFleetComplete(placement.board);
   }
+
+  const titleScreen = createTitleScreen({
+    briefing: el.briefing,
+    launch: el.launch,
+    reducedMotion,
+    onLaunch: () => {
+      screen = 'intro';
+      render();
+      el.levelCards.querySelector<HTMLInputElement>('input:checked')?.focus();
+    },
+  });
+  titleScreen.start();
 
   render();
 }

@@ -16,7 +16,9 @@ function setup(): HTMLElement {
   document.body.append(root);
   mountApp(root, createRng(7));
 
-  // intro -> placement -> battle
+  // title -> mission select -> placement -> battle
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+  root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
   root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
   root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
   root.querySelector<HTMLButtonElement>('[data-ref="start"]')!.click();
