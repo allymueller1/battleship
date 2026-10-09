@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../game/rng';
 import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp, type MountOptions } from './app';
 import { SHAKE_MS, VICTORY_DELAY_MS } from './effects';
+import { LEADERBOARD_KEY } from './leaderboard';
 
 // jsdom lacks HTMLDialogElement.showModal/close — stub them to track `open`.
 HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -322,6 +323,27 @@ describe('the local leaderboard', () => {
     root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
   }
 
+  function winOnCadet(root: HTMLElement): void {
+    const cadet = root.querySelector<HTMLInputElement>('input[value="easy"]')!;
+    cadet.checked = true;
+    cadet.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="start"]')!.click();
+    for (let row = 0; row < 10 && !statusText(root).includes('Victory!'); row++) {
+      for (let col = 0; col < 10 && !statusText(root).includes('Victory!'); col++) {
+        enemyCell(root, row, col).click();
+        if (isOver(root)) {
+          break;
+        }
+        vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+        if (isOver(root)) {
+          break;
+        }
+      }
+    }
+  }
+
   it('saves a win and shows its rank in the end screen', () => {
     vi.useFakeTimers();
     const store = fakeStore();
@@ -418,6 +440,59 @@ describe('the local leaderboard', () => {
       toIntro(root, store);
       expect(root.querySelectorAll('.lb-empty')).toHaveLength(3);
       expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('keeps wins another tab saved while this one played', () => {
+    vi.useFakeTimers();
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      // Another tab saved an easy win while this one was playing.
+      store.data.set(
+        LEADERBOARD_KEY,
+        JSON.stringify({ easy: [{ strikes: 60, date: '2026-10-01' }] }),
+      );
+      winOnCadet(root);
+      expect(statusText(root)).toContain('Victory!');
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+
+      const saved = JSON.parse(store.data.get(LEADERBOARD_KEY)!);
+      expect(saved.easy).toHaveLength(2);
+      expect(saved.easy.map((e: { strikes: number }) => e.strikes)).toContain(60);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('reloads the leaderboard when another tab changes it', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      // Another tab writes a second entry.
+      store.data.set(
+        LEADERBOARD_KEY,
+        JSON.stringify({
+          easy: [
+            { strikes: 25, date: '2026-10-09' },
+            { strikes: 30, date: '2026-10-10' },
+          ],
+        }),
+      );
+      window.dispatchEvent(new StorageEvent('storage', { key: LEADERBOARD_KEY }));
+      const strikes = Array.from(
+        root.querySelectorAll<HTMLElement>('.leaderboard-level .lb-strikes'),
+      ).map((el) => el.textContent);
+      expect(strikes).toEqual(['25 strikes', '30 strikes']);
     } finally {
       vi.useRealTimers();
       root.remove();

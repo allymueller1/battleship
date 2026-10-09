@@ -38,6 +38,7 @@ import {
   browserStore,
   clearLeaderboard,
   emptyLeaderboard,
+  LEADERBOARD_KEY,
   loadLeaderboard,
   rankMessage,
   saveLeaderboard,
@@ -356,6 +357,13 @@ export function mountApp(
   });
   el.newGame.addEventListener('click', reset);
   el.playAgain.addEventListener('click', reset);
+  window.addEventListener('storage', (event) => {
+    if (event.key === LEADERBOARD_KEY || event.key === null) {
+      leaderboard = loadLeaderboard(store);
+      renderLeaderboard();
+    }
+  });
+
   el.clearScores.addEventListener('click', () => {
     if (!window.confirm('Clear all your saved scores?')) {
       return;
@@ -482,6 +490,8 @@ export function mountApp(
     const won = game.winner === 'player';
     root.classList.add(won ? 'fx-victory' : 'fx-defeat');
     if (won) {
+      // Another tab may have saved wins since this page loaded.
+      leaderboard = loadLeaderboard(store);
       const scored = addScore(leaderboard, difficulty, {
         strikes: game.computerBoard.shots.size,
         date: new Date().toISOString().slice(0, 10),
