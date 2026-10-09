@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../game/rng';
 import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp, type MountOptions } from './app';
 import { SHAKE_MS, VICTORY_DELAY_MS } from './effects';
+import { LEADERBOARD_KEY } from './leaderboard';
+import { shipDisplayName } from './theme';
 
 // jsdom lacks HTMLDialogElement.showModal/close — stub them to track `open`.
 HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -168,5 +170,511 @@ describe('effects with reduced motion', () => {
     expect(reduced.classList.contains('shake')).toBe(false);
     vi.useRealTimers();
     reduced.remove();
+  });
+});
+
+describe('dragging a placed ship', () => {
+  function setupPlacing(): HTMLElement {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountApp(root, createRng(7));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+    root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+    return root;
+  }
+
+  interface C {
+    row: number;
+    col: number;
+  }
+
+  const key = (c: C) => `${c.row},${c.col}`;
+
+  function playerCell(root: HTMLElement, row: number, col: number): HTMLButtonElement {
+    return root.querySelector<HTMLButtonElement>(
+      `[data-ref="playerBoard"] .cell[data-row="${row}"][data-col="${col}"]`,
+    )!;
+  }
+
+  interface ShipSprite {
+    type: string;
+    origin: C;
+    horizontal: boolean;
+    length: number;
+  }
+
+  /** Every placed ship, read from the rendered ship-sprite overlays. */
+  function placedShips(root: HTMLElement): ShipSprite[] {
+    return Array.from(
+      root.querySelectorAll<HTMLElement>('[data-ref="playerBoard"] .ship-sprite'),
+    ).map((el) => ({
+      type: Array.from(el.classList)
+        .find(
+          (c) =>
+            c.startsWith('ship-sprite--') &&
+            c !== 'ship-sprite--horizontal' &&
+            c !== 'ship-sprite--vertical',
+        )!
+        .replace('ship-sprite--', ''),
+      origin: {
+        row: Number(el.style.getPropertyValue('--row')),
+        col: Number(el.style.getPropertyValue('--col')),
+      },
+      horizontal: el.classList.contains('ship-sprite--horizontal'),
+      length: Number(el.style.getPropertyValue('--len')),
+    }));
+  }
+
+  function spriteCells(ship: ShipSprite, origin: C = ship.origin): C[] {
+    return Array.from({ length: ship.length }, (_, i) =>
+      ship.horizontal
+        ? { row: origin.row, col: origin.col + i }
+        : { row: origin.row + i, col: origin.col },
+    );
+  }
+
+  function pointer(type: string, x: number, y: number): MouseEvent {
+    const e = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 });
+    Object.defineProperty(e, 'pointerId', { value: 1 });
+    Object.defineProperty(e, 'isPrimary', { value: true });
+    return e;
+  }
+
+  function dragShip(root: HTMLElement, from: C, to: C): void {
+    const grid = root.querySelector('[data-ref="playerBoard"] [role="grid"]')!;
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => playerCell(root, to.row, to.col);
+    try {
+      playerCell(root, from.row, from.col).dispatchEvent(pointer('pointerdown', 0, 0));
+      grid.dispatchEvent(pointer('pointermove', 10, 10));
+      grid.dispatchEvent(pointer('pointerup', 10, 10));
+    } finally {
+      document.elementFromPoint = original;
+    }
+  }
+
+  function shipButton(root: HTMLElement, type: string): HTMLButtonElement {
+    const name = shipDisplayName(type as Parameters<typeof shipDisplayName>[0]);
+    return Array.from(
+      root.querySelectorAll<HTMLButtonElement>('[data-ref="shipList"] button'),
+    ).find((b) => b.getAttribute('aria-label')?.startsWith(`${name},`))!;
+  }
+
+  it('moves a ship to a valid spot and snaps back onto an overlap', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ship = placedShips(root)[0]!;
+      const occupied = new Set(
+        placedShips(root)
+          .flatMap((s) => spriteCells(s))
+          .map(key),
+      );
+
+      // Find an empty origin the ship fits at.
+      let dest: C | null = null;
+      outer: for (let row = 0; row < 10; row++) {
+        for (let col = 0; col < 10; col++) {
+          const target = spriteCells(ship, { row, col });
+          if (target.every((c) => c.row < 10 && c.col < 10 && !occupied.has(key(c)))) {
+            dest = { row, col };
+            break outer;
+          }
+        }
+      }
+      expect(dest).not.toBeNull();
+
+      // Grab the origin cell (grab index 0) and drag it to the new origin.
+      dragShip(root, ship.origin, dest!);
+      for (const c of spriteCells(ship, dest!)) {
+        expect(playerCell(root, c.row, c.col).className).toContain('ship');
+      }
+
+      // Drag it onto another ship: it snaps back and a note explains why.
+      const moved = placedShips(root).find((s) => s.type === ship.type)!;
+      const other = placedShips(root).find((s) => s.type !== ship.type)!;
+      dragShip(root, moved.origin, other.origin);
+      for (const c of spriteCells(ship, dest!)) {
+        expect(playerCell(root, c.row, c.col).className).toContain('ship');
+      }
+      expect(root.querySelector('[data-ref="statusTurn"]')!.textContent).toContain(
+        "didn't fit there, so it went back",
+      );
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+  it('puts a tap-picked ship back when another ship is selected', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ships = placedShips(root);
+      const first = ships[0]!;
+      const other = ships.find((s) => s.type !== first.type)!;
+      // Tap the first ship's cell: it lifts off the board (4 sprites remain).
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      // Pick a different ship from the list: the first ship goes back where
+      // it was, and the new ship is now the lifted one.
+      shipButton(root, other.type).click();
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
+      expect(placedShips(root)).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('puts a tap-picked ship back on Escape', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const first = placedShips(root)[0]!;
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(placedShips(root)).toHaveLength(5);
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('puts a tap-picked ship back before another ship is dragged', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ships = placedShips(root);
+      const first = ships[0]!;
+      const other = ships.find((s) => s.type !== first.type)!;
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      // Start dragging the other ship.
+      const grid = root.querySelector('[data-ref="playerBoard"] [role="grid"]')!;
+      const original = document.elementFromPoint;
+      document.elementFromPoint = () =>
+        playerCell(root, other.origin.row, other.origin.col === 9 ? 8 : other.origin.col + 1);
+      try {
+        playerCell(root, other.origin.row, other.origin.col).dispatchEvent(
+          pointer('pointerdown', 0, 0),
+        );
+        grid.dispatchEvent(pointer('pointermove', 10, 10));
+      } finally {
+        document.elementFromPoint = original;
+      }
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});
+
+describe('the local leaderboard', () => {
+  function fakeStore(initial: string | null = null) {
+    const data = new Map<string, string>();
+    if (initial !== null) {
+      data.set('nebula-strike:leaderboard:v1', initial);
+    }
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => data.set(key, String(value)),
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+  }
+
+  function toIntro(root: HTMLElement, store: ReturnType<typeof fakeStore>): void {
+    mountApp(root, createRng(7), { storage: store });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+    root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+  }
+
+  function winOnCadet(root: HTMLElement): void {
+    const cadet = root.querySelector<HTMLInputElement>('input[value="easy"]')!;
+    cadet.checked = true;
+    cadet.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-ref="start"]')!.click();
+    for (let row = 0; row < 10 && !statusText(root).includes('Victory!'); row++) {
+      for (let col = 0; col < 10 && !statusText(root).includes('Victory!'); col++) {
+        enemyCell(root, row, col).click();
+        if (isOver(root)) {
+          break;
+        }
+        vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+        if (isOver(root)) {
+          break;
+        }
+      }
+    }
+  }
+
+  it('saves a win and shows its rank in the end screen', () => {
+    vi.useFakeTimers();
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      const cadet = root.querySelector<HTMLInputElement>('input[value="easy"]')!;
+      cadet.checked = true;
+      cadet.dispatchEvent(new Event('change'));
+      root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="start"]')!.click();
+
+      // Sweep every enemy cell until the player wins.
+      for (let row = 0; row < 10 && !statusText(root).includes('Victory!'); row++) {
+        for (let col = 0; col < 10 && !statusText(root).includes('Victory!'); col++) {
+          enemyCell(root, row, col).click();
+          if (isOver(root)) {
+            break;
+          }
+          vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+          if (isOver(root)) {
+            break;
+          }
+        }
+      }
+      expect(statusText(root)).toContain('Victory!');
+
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+      const rank = ref(root, 'endRank');
+      expect(rank.hidden).toBe(false);
+      expect(rank.textContent).toBe('New best on Cadet!');
+
+      const saved = JSON.parse(store.data.get('nebula-strike:leaderboard:v1')!);
+      expect(saved.easy).toHaveLength(1);
+      expect(saved.easy[0].strikes).toBeGreaterThanOrEqual(17);
+      expect(saved.easy[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('renders stored wins per level and "No wins yet" for empty ones', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      const levels = Array.from(
+        root.querySelectorAll<HTMLElement>('[data-ref="leaderboardLevels"] .leaderboard-level'),
+      );
+      expect(levels.map((l) => l.querySelector('h3')!.textContent)).toEqual([
+        'Cadet',
+        'Captain',
+        'Admiral',
+      ]);
+      expect(levels[0]!.querySelector('.lb-strikes')!.textContent).toBe('25 strikes');
+      expect(levels[0]!.querySelector('.lb-date')!.textContent).toContain('2026');
+      expect(levels[1]!.querySelector('.lb-empty')!.textContent).toBe('No wins yet');
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('clears all scores after confirmation', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      ref<HTMLButtonElement>(root, 'clearScores').click();
+      expect(store.data.has('nebula-strike:leaderboard:v1')).toBe(false);
+      expect(root.querySelectorAll('.lb-empty')).toHaveLength(3);
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('shows empty lists for corrupt stored data without throwing', () => {
+    vi.useFakeTimers();
+    const store = fakeStore('{{{corrupt');
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      expect(root.querySelectorAll('.lb-empty')).toHaveLength(3);
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('keeps wins another tab saved while this one played', () => {
+    vi.useFakeTimers();
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      // Another tab saved an easy win while this one was playing.
+      store.data.set(
+        LEADERBOARD_KEY,
+        JSON.stringify({ easy: [{ strikes: 60, date: '2026-10-01' }] }),
+      );
+      winOnCadet(root);
+      expect(statusText(root)).toContain('Victory!');
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+
+      const saved = JSON.parse(store.data.get(LEADERBOARD_KEY)!);
+      expect(saved.easy).toHaveLength(2);
+      expect(saved.easy.map((e: { strikes: number }) => e.strikes)).toContain(60);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('reloads the leaderboard when another tab changes it', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      // Another tab writes a second entry.
+      store.data.set(
+        LEADERBOARD_KEY,
+        JSON.stringify({
+          easy: [
+            { strikes: 25, date: '2026-10-09' },
+            { strikes: 30, date: '2026-10-10' },
+          ],
+        }),
+      );
+      window.dispatchEvent(new StorageEvent('storage', { key: LEADERBOARD_KEY }));
+      const strikes = Array.from(
+        root.querySelectorAll<HTMLElement>('.leaderboard-level .lb-strikes'),
+      ).map((el) => el.textContent);
+      expect(strikes).toEqual(['25 strikes', '30 strikes']);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('dates a win in local time, not UTC', () => {
+    const proc = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!;
+    const previousTz = proc.env.TZ;
+    proc.env.TZ = 'America/New_York';
+    vi.useFakeTimers();
+    // 02:00 UTC on Oct 7 is still Oct 6 in New York.
+    vi.setSystemTime(new Date('2026-10-07T02:00:00Z'));
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      winOnCadet(root);
+      expect(statusText(root)).toContain('Victory!');
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+      const saved = JSON.parse(store.data.get(LEADERBOARD_KEY)!);
+      expect(saved.easy[0].date).toBe('2026-10-06');
+    } finally {
+      vi.useRealTimers();
+      proc.env.TZ = previousTz;
+      root.remove();
+    }
+  });
+
+  it('keeps scores listed and says so when clearing fails', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    store.removeItem = () => {
+      throw new Error('denied');
+    };
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      ref<HTMLButtonElement>(root, 'clearScores').click();
+      const strikes = Array.from(
+        root.querySelectorAll<HTMLElement>('.leaderboard-level .lb-strikes'),
+      ).map((el) => el.textContent);
+      expect(strikes).toEqual(['25 strikes']);
+      expect(ref(root, 'leaderboardMessage').textContent).toBe(
+        "Couldn't clear scores in this browser.",
+      );
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});
+describe('randomizing while a ship is being dragged', () => {
+  it('cancels the drag so a late pointerup does nothing', () => {
+    vi.useFakeTimers();
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountApp(root, createRng(7));
+    const errors: string[] = [];
+    window.addEventListener('error', (e) => errors.push(String(e.error ?? e.message)));
+    try {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+      root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+
+      const board = '[data-ref="playerBoard"]';
+      const grid = root.querySelector(`${board} [role="grid"]`)!;
+      const cellAt = (r: number, c: number) =>
+        root.querySelector<HTMLElement>(`${board} .cell[data-row="${r}"][data-col="${c}"]`)!;
+      const mk = (t: string) => {
+        const e = new MouseEvent(t, { bubbles: true, button: 0 });
+        Object.defineProperty(e, 'pointerId', { value: 1 });
+        return e;
+      };
+      const start = root.querySelector<HTMLElement>(`${board} .cell.ship`)!;
+      const dest = cellAt(9, 9);
+      document.elementFromPoint = () => dest;
+      start.dispatchEvent(mk('pointerdown'));
+      grid.dispatchEvent(mk('pointermove'));
+
+      // Randomize mid-drag, then the stale finger lifts.
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+      grid.dispatchEvent(mk('pointerup'));
+
+      expect(errors).toEqual([]);
+      const sprites = Array.from(root.querySelectorAll<HTMLElement>(`${board} .ship-sprite`));
+      expect(sprites).toHaveLength(5);
+      const types = sprites.map((el) =>
+        Array.from(el.classList).find(
+          (c) =>
+            c.startsWith('ship-sprite--') &&
+            c !== 'ship-sprite--horizontal' &&
+            c !== 'ship-sprite--vertical',
+        )!,
+      );
+      expect(new Set(types).size).toBe(5);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
   });
 });

@@ -19,16 +19,32 @@ import {
   turnMessage,
 } from './messages';
 import {
+  dragOrigin,
+  dropDrag,
   initialPlacement,
-  pickUpAt,
   placeSelected,
   previewAt,
   randomizePlacement,
   rotate,
   selectShip,
+  startDrag,
+  type Drag,
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
+import {
+  addScore,
+  browserStore,
+  clearLeaderboard,
+  emptyLeaderboard,
+  LEADERBOARD_KEY,
+  loadLeaderboard,
+  localDateString,
+  rankMessage,
+  saveLeaderboard,
+  type Leaderboard,
+  type ScoreStore,
+} from './leaderboard';
 import { effectForShot, SHAKE_MS, VICTORY_DELAY_MS } from './effects';
 import { shipDisplayName } from './theme';
 import { BRIEFING_LINES, createTitleScreen } from './titleScreen';
@@ -55,6 +71,12 @@ const TEMPLATE = `
     </fieldset>
     <p class="intro-note">No level can see your ships. Each one only knows its own hits and misses. A good human player usually needs about 50 to 60 shots.</p>
     <button type="button" class="primary intro-start" data-ref="introStart">Start mission</button>
+    <section class="leaderboard" aria-labelledby="leaderboard-title" data-ref="leaderboard">
+      <h2 id="leaderboard-title">Your best wins</h2>
+      <div class="leaderboard-levels" data-ref="leaderboardLevels"></div>
+      <p class="lb-message" data-ref="leaderboardMessage" role="status"></p>
+      <button type="button" class="link-button" data-ref="clearScores">Clear scores</button>
+    </section>
   </section>
   <header class="top" data-ref="top">
     <h1>Nebula Strike</h1>
@@ -68,7 +90,7 @@ const TEMPLATE = `
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
       <h2 id="setup-title">Deploy your fleet</h2>
-      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Select a placed ship to move it.</p>
+      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Drag a placed ship to move it, or select it and choose a new cell. Press Escape to put it back.</p>
       <div class="ship-list" role="group" aria-label="Ships" data-ref="shipList"></div>
       <div class="controls">
         <button type="button" data-ref="rotate">Rotate</button>
@@ -91,6 +113,7 @@ const TEMPLATE = `
   <dialog class="end" aria-labelledby="end-title" aria-describedby="end-text" data-ref="endDialog">
     <h2 id="end-title" data-ref="endTitle"></h2>
     <p id="end-text" class="end-text" data-ref="endText"></p>
+    <p class="end-rank" data-ref="endRank" hidden></p>
     <dl class="end-stats" data-ref="endStats"></dl>
     <button type="button" class="primary" data-ref="playAgain" autofocus>Play again</button>
   </dialog>
@@ -126,6 +149,7 @@ function shipSprite(ship: PlacedShip, state: 'intact' | 'wreck'): ShipSprite {
 
 export interface MountOptions {
   readonly reducedMotion?: () => boolean;
+  readonly storage?: ScoreStore | null;
 }
 
 /** Wires the pure game logic to the DOM. `rng` is injectable so tests can seed it. */
@@ -137,6 +161,9 @@ export function mountApp(
   const reducedMotion =
     options.reducedMotion ??
     (() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const store = options.storage === undefined ? browserStore() : options.storage;
+  let leaderboard: Leaderboard = loadLeaderboard(store);
+  let lastRank: number | null = null;
   root.innerHTML = TEMPLATE;
   const el = {
     newGame: ref<HTMLButtonElement>(root, 'newGame'),
@@ -163,8 +190,12 @@ export function mountApp(
     endDialog: ref<HTMLDialogElement>(root, 'endDialog'),
     endTitle: ref(root, 'endTitle'),
     endText: ref(root, 'endText'),
+    endRank: ref(root, 'endRank'),
     endStats: ref(root, 'endStats'),
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
+    leaderboardLevels: ref(root, 'leaderboardLevels'),
+    leaderboardMessage: ref(root, 'leaderboardMessage'),
+    clearScores: ref<HTMLButtonElement>(root, 'clearScores'),
   };
 
   let screen: 'title' | 'intro' | 'game' = 'title';
@@ -175,6 +206,9 @@ export function mountApp(
   let playerResult = '';
   let computerResult = '';
   let note = '';
+  let drag: Drag | null = null;
+  // A ship lifted by tap or the ship list, pending placement or restoration.
+  let pickedUp: Drag | null = null;
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
   let shakeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -186,8 +220,57 @@ export function mountApp(
     label: 'Your fleet',
     onActivate: onPlayerCell,
     onHover: (c) => {
+      if (drag) {
+        return;
+      }
       hover = c;
       render();
+    },
+    drag: {
+      canStart: (c) => game.phase === 'placing' && shipAt(placement.board, c) !== undefined,
+      onStart: (c) => {
+        restorePickedUp();
+        const started = startDrag(placement, c);
+        if (!started) {
+          return;
+        }
+        placement = started.state;
+        drag = started.drag;
+        hover = c;
+        render();
+      },
+      onMove: (c) => {
+        if (!drag) {
+          return;
+        }
+        hover = c ? dragOrigin(drag, c, placement.orientation) : null;
+        render();
+      },
+      onEnd: (c) => {
+        if (!drag) {
+          return;
+        }
+        const origin = c ? dragOrigin(drag, c, placement.orientation) : null;
+        const dropped = dropDrag(placement, drag, origin);
+        placement = dropped.state;
+        note = dropped.snappedBack
+          ? `The ${shipDisplayName(drag.type)} didn't fit there, so it went back.`
+          : '';
+        drag = null;
+        hover = null;
+        render();
+      },
+      onCancel: () => {
+        if (!drag) {
+          return;
+        }
+        const dropped = dropDrag(placement, drag, null);
+        placement = dropped.state;
+        note = `The ${shipDisplayName(drag.type)} didn't fit there, so it went back.`;
+        drag = null;
+        hover = null;
+        render();
+      },
     },
   });
   const enemyView = createBoardView({ label: 'Enemy sector', onActivate: onEnemyCell });
@@ -209,6 +292,12 @@ export function mountApp(
     const label = document.createElement('span');
     button.append(icon, label);
     button.addEventListener('click', () => {
+      cancelActiveDrag();
+      restorePickedUp();
+      const placed = placement.board.ships.find((s) => s.type === spec.type);
+      pickedUp = placed
+        ? { type: placed.type, from: placed.origin, orientation: placed.orientation, grab: 0 }
+        : null;
       placement = selectShip(placement, spec.type);
       note = '';
       render();
@@ -253,6 +342,7 @@ export function mountApp(
   });
 
   el.changeLevel.addEventListener('click', () => {
+    cancelActiveDrag();
     screen = 'intro';
     render();
     el.levelCards.querySelector<HTMLInputElement>('input:checked')?.focus();
@@ -263,11 +353,14 @@ export function mountApp(
     render();
   });
   el.randomize.addEventListener('click', () => {
+    cancelActiveDrag();
+    pickedUp = null;
     placement = randomizePlacement(placement, rng);
     note = 'Fleet deployed at random. Start the battle, or select a ship to move it.';
     render();
   });
   el.start.addEventListener('click', () => {
+    cancelActiveDrag();
     if (!isFleetComplete(placement.board)) {
       return;
     }
@@ -279,9 +372,76 @@ export function mountApp(
   });
   el.newGame.addEventListener('click', reset);
   el.playAgain.addEventListener('click', reset);
+  window.addEventListener('storage', (event) => {
+    if (event.key === LEADERBOARD_KEY || event.key === null) {
+      leaderboard = loadLeaderboard(store);
+      renderLeaderboard();
+    }
+  });
+
+  el.clearScores.addEventListener('click', () => {
+    if (!window.confirm('Clear all your saved scores?')) {
+      return;
+    }
+    if (clearLeaderboard(store)) {
+      leaderboard = emptyLeaderboard();
+      el.leaderboardMessage.textContent = '';
+      renderLeaderboard();
+    } else {
+      el.leaderboardMessage.textContent = "Couldn't clear scores in this browser.";
+    }
+  });
+
+  function renderLeaderboard(): void {
+    el.leaderboardLevels.replaceChildren(
+      ...LEVELS.map((level) => {
+        const section = document.createElement('div');
+        section.className = 'leaderboard-level';
+        const heading = document.createElement('h3');
+        heading.textContent = level.name;
+        section.append(heading);
+        const entries = leaderboard[level.level];
+        if (entries.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'lb-empty';
+          empty.textContent = 'No wins yet';
+          section.append(empty);
+        } else {
+          const list = document.createElement('ol');
+          for (const entry of entries) {
+            const item = document.createElement('li');
+            const strikes = document.createElement('span');
+            strikes.className = 'lb-strikes';
+            strikes.textContent = `${entry.strikes} strikes`;
+            const date = document.createElement('span');
+            date.className = 'lb-date';
+            date.textContent = new Date(`${entry.date}T00:00:00`).toLocaleDateString(undefined, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+            item.append(strikes, ' ', date);
+            list.append(item);
+          }
+          section.append(list);
+        }
+        return section;
+      }),
+    );
+    el.clearScores.hidden = LEVELS.every((level) => leaderboard[level.level].length === 0);
+  }
 
   document.addEventListener('keydown', (event) => {
-    if (screen !== 'game' || game.phase !== 'placing' || event.key.toLowerCase() !== 'r') {
+    if (screen !== 'game' || game.phase !== 'placing') {
+      return;
+    }
+    if (event.key === 'Escape') {
+      cancelActiveDrag();
+      restorePickedUp();
+      render();
+      return;
+    }
+    if (event.key.toLowerCase() !== 'r') {
       return;
     }
     if (event.ctrlKey || event.metaKey || event.altKey) {
@@ -291,19 +451,44 @@ export function mountApp(
     render();
   });
 
+  /** A ship lifted by tap or the list goes back where it was. */
+  function restorePickedUp(): void {
+    if (!pickedUp) {
+      return;
+    }
+    placement = dropDrag(placement, pickedUp, null).state;
+    pickedUp = null;
+  }
+
+  /** A live pointer drag can't survive the board changing under it. */
+  function cancelActiveDrag(): void {
+    if (!drag) {
+      return;
+    }
+    placement = dropDrag(placement, drag, null).state;
+    drag = null;
+    hover = null;
+    playerView.cancelDrag();
+  }
+
   function onPlayerCell(c: Coord): void {
     if (game.phase !== 'placing') {
       return;
     }
-    const picked = placement.selected ? null : pickUpAt(placement, c);
+    cancelActiveDrag();
+    const picked = placement.selected ? null : startDrag(placement, c);
     if (picked) {
-      placement = picked;
+      placement = picked.state;
+      pickedUp = picked.drag;
       note = '';
     } else if (shipAt(placement.board, c) && placement.selected) {
       note = placementMessage('overlap', placement.selected);
     } else {
       const { state, error } = placeSelected(placement, c);
       placement = state;
+      if (!error) {
+        pickedUp = null;
+      }
       note = error ? placementMessage(error, placement.selected) : '';
     }
     render();
@@ -357,6 +542,18 @@ export function mountApp(
   function scheduleEnd(): void {
     const won = game.winner === 'player';
     root.classList.add(won ? 'fx-victory' : 'fx-defeat');
+    if (won) {
+      // Another tab may have saved wins since this page loaded.
+      leaderboard = loadLeaderboard(store);
+      const scored = addScore(leaderboard, difficulty, {
+        strikes: game.computerBoard.shots.size,
+        date: localDateString(new Date()),
+      });
+      leaderboard = scored.board;
+      lastRank = scored.rank;
+      saveLeaderboard(store, leaderboard);
+      renderLeaderboard();
+    }
     endTimer = setTimeout(showEnd, won ? VICTORY_DELAY_MS : END_SCREEN_DELAY_MS);
   }
 
@@ -364,6 +561,9 @@ export function mountApp(
     const summary = endSummary(game, levelName(difficulty));
     el.endTitle.textContent = summary.title;
     el.endText.textContent = summary.text;
+    const rankText = rankMessage(lastRank, levelName(difficulty));
+    el.endRank.textContent = rankText;
+    el.endRank.hidden = rankText === '';
     el.endStats.replaceChildren(
       ...[
         ['Your strikes', summary.player.shots],
@@ -401,11 +601,16 @@ export function mountApp(
       el.endDialog.close();
     }
     game = createGame(rng);
+    cancelActiveDrag();
+    pickedUp = null;
     placement = initialPlacement();
     hover = null;
+    drag = null;
     playerResult = '';
     computerResult = '';
     note = '';
+    lastRank = null;
+    el.endRank.hidden = true;
     render();
     shipButtons[0]?.button.focus();
   }
@@ -522,5 +727,6 @@ export function mountApp(
   });
   titleScreen.start();
 
+  renderLeaderboard();
   render();
 }

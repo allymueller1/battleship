@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { isFleetComplete } from '../game/board';
+import { isFleetComplete, placeShip, shipAt } from '../game/board';
 import { createRng } from '../game/rng';
 import {
+  dragOrigin,
+  dropDrag,
   initialPlacement,
   nextUnplaced,
-  pickUpAt,
   placeSelected,
   previewAt,
   randomizePlacement,
   rotate,
   selectShip,
+  startDrag,
+  type Drag,
+  type PlacementState,
 } from './placement';
 
 describe('initialPlacement', () => {
@@ -60,19 +64,7 @@ describe('placeSelected', () => {
   });
 });
 
-describe('selectShip / pickUpAt', () => {
-  it('picks a placed ship back up, keeping its orientation', () => {
-    const placed = placeSelected(rotate(initialPlacement()), { row: 0, col: 0 }).state;
-    const picked = pickUpAt(placed, { row: 3, col: 0 });
-    expect(picked?.board.ships).toHaveLength(0);
-    expect(picked?.selected).toBe('carrier');
-    expect(picked?.orientation).toBe('vertical');
-  });
-
-  it('returns null for an empty cell', () => {
-    expect(pickUpAt(initialPlacement(), { row: 5, col: 5 })).toBeNull();
-  });
-
+describe('selectShip', () => {
   it('selecting an unplaced ship just selects it', () => {
     const s = selectShip(initialPlacement(), 'destroyer');
     expect(s.selected).toBe('destroyer');
@@ -123,5 +115,119 @@ describe('previewAt', () => {
     expect(previewAt(initialPlacement(), null)).toBeNull();
     const full = randomizePlacement(initialPlacement(), createRng(1));
     expect(previewAt(full, { row: 0, col: 0 })).toBeNull();
+  });
+});
+
+describe('startDrag', () => {
+  const placed = (): PlacementState => placeSelected(initialPlacement(), { row: 0, col: 0 }).state;
+
+  it('returns null on an empty cell', () => {
+    expect(startDrag(placed(), { row: 5, col: 5 })).toBeNull();
+  });
+
+  it('picks up the ship and remembers the grabbed cell', () => {
+    const s = placed();
+    const out = startDrag(s, { row: 0, col: 2 });
+    expect(out).not.toBeNull();
+    const { state, drag } = out!;
+    expect(state.board.ships).toHaveLength(0);
+    expect(state.selected).toBe('carrier');
+    expect(drag).toEqual({
+      type: 'carrier',
+      from: { row: 0, col: 0 },
+      orientation: 'horizontal',
+      grab: 2,
+    });
+  });
+});
+
+describe('dragOrigin', () => {
+  const drag: Drag = {
+    type: 'carrier',
+    from: { row: 0, col: 0 },
+    orientation: 'horizontal',
+    grab: 2,
+  };
+
+  it('keeps the grabbed cell under the pointer, horizontal', () => {
+    expect(dragOrigin(drag, { row: 4, col: 6 }, 'horizontal')).toEqual({ row: 4, col: 4 });
+  });
+
+  it('keeps the grabbed cell under the pointer, vertical', () => {
+    expect(dragOrigin({ ...drag, grab: 1 }, { row: 6, col: 3 }, 'vertical')).toEqual({
+      row: 5,
+      col: 3,
+    });
+  });
+});
+
+describe('dropDrag', () => {
+  const setUp = () => {
+    const s = placeSelected(initialPlacement(), { row: 0, col: 0 }).state;
+    const out = startDrag(s, { row: 0, col: 2 })!;
+    return { state: out.state, drag: out.drag };
+  };
+
+  it('places the ship at a valid new origin', () => {
+    const { state, drag } = setUp();
+    const dropped = dropDrag(state, drag, { row: 4, col: 4 });
+    expect(dropped.snappedBack).toBe(false);
+    expect(dropped.state.board.ships[0]!.origin).toEqual({ row: 4, col: 4 });
+    expect(dropped.state.selected).toBe(nextUnplaced(dropped.state.board));
+  });
+
+  it('snaps back onto an overlap', () => {
+    const { state, drag } = setUp();
+    const withBattleship = placeShip(state.board, 'battleship', { row: 4, col: 0 }, 'vertical');
+    const dropped = dropDrag({ ...state, board: withBattleship }, drag, { row: 4, col: 0 });
+    expect(dropped.snappedBack).toBe(true);
+    const ship = dropped.state.board.ships.find((s) => s.type === 'carrier')!;
+    expect(ship.origin).toEqual({ row: 0, col: 0 });
+    expect(ship.orientation).toBe('horizontal');
+    expect(dropped.state.orientation).toBe('horizontal');
+    expect(dropped.state.selected).toBe(nextUnplaced(dropped.state.board));
+  });
+
+  it('snaps back when partly off the board', () => {
+    const { state, drag } = setUp();
+    const dropped = dropDrag(state, drag, { row: 0, col: 8 });
+    expect(dropped.snappedBack).toBe(true);
+    expect(dropped.state.board.ships[0]!.origin).toEqual({ row: 0, col: 0 });
+  });
+
+  it('snaps back on a null drop', () => {
+    const { state, drag } = setUp();
+    const dropped = dropDrag(state, drag, null);
+    expect(dropped.snappedBack).toBe(true);
+    expect(dropped.state.board.ships[0]!.origin).toEqual({ row: 0, col: 0 });
+  });
+});
+
+describe('dropDrag defensive cases', () => {
+  const setUp = () => {
+    const s = placeSelected(initialPlacement(), { row: 0, col: 0 }).state;
+    const out = startDrag(s, { row: 0, col: 2 })!;
+    return { state: out.state, drag: out.drag };
+  };
+
+  it('does nothing when the ship is already back on the board', () => {
+    const { state, drag } = setUp();
+    // Simulate the ship being re-placed by another path while the drag was live.
+    const board = placeShip(state.board, drag.type, { row: 5, col: 5 }, 'vertical');
+    const busy = { ...state, board };
+    const dropped = dropDrag(busy, drag, { row: 7, col: 0 });
+    expect(dropped.snappedBack).toBe(false);
+    expect(dropped.state).toBe(busy);
+  });
+
+  it('leaves the ship unplaced and selected when the snap-back spot is blocked', () => {
+    const { state, drag } = setUp();
+    // Another ship now occupies the drag's original cells.
+    const board = placeShip(state.board, 'destroyer', { row: 0, col: 0 }, 'horizontal');
+    const dropped = dropDrag({ ...state, board }, drag, null);
+    expect(dropped.snappedBack).toBe(true);
+    expect(shipAt(dropped.state.board, { row: 0, col: 0 })?.type).toBe('destroyer');
+    expect(dropped.state.board.ships.find((s) => s.type === 'carrier')).toBeUndefined();
+    expect(dropped.state.selected).toBe('carrier');
   });
 });
