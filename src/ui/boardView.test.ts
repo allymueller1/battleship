@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FX_LIFETIME_MS } from './effects';
 import { createBoardView, type ShipSprite } from './boardView';
 
 const sprite = (over: Partial<ShipSprite> = {}): ShipSprite => ({
@@ -45,5 +46,26 @@ describe('setShips', () => {
 
     view.setShips([sprite({ state: 'wreck' })]);
     expect(view.element.querySelector('.ship-sprite')).not.toBe(first);
+  });
+});
+
+describe('clearEffects', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('forgets effect timers once they fire', () => {
+    vi.useFakeTimers();
+    const view = createBoardView({ label: 'test', onActivate: () => {} });
+    for (let i = 0; i < 3; i++) {
+      view.spawnEffect('miss', [{ row: i, col: i }], false);
+    }
+
+    vi.advanceTimersByTime(FX_LIFETIME_MS);
+    expect(view.element.querySelectorAll('.fx-layer .fx')).toHaveLength(0);
+
+    const spy = vi.spyOn(globalThis, 'clearTimeout');
+    view.clearEffects();
+    expect(spy).not.toHaveBeenCalled();
   });
 });

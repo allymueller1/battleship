@@ -180,7 +180,7 @@ export function createBoardView(options: BoardViewOptions): BoardView {
   wrap.append(grid, shipLayer, fxLayer);
 
   let shipKey = '';
-  let fxTimers: ReturnType<typeof setTimeout>[] = [];
+  const fxTimers = new Set<ReturnType<typeof setTimeout>>();
 
   syncTabIndex();
 
@@ -237,14 +237,18 @@ export function createBoardView(options: BoardViewOptions): BoardView {
           }
         }
         fxLayer.append(fx);
-        fxTimers.push(setTimeout(() => fx.remove(), FX_LIFETIME_MS));
+        const timer = setTimeout(() => {
+          fx.remove();
+          fxTimers.delete(timer);
+        }, FX_LIFETIME_MS);
+        fxTimers.add(timer);
       }
     },
     clearEffects() {
       for (const timer of fxTimers) {
         clearTimeout(timer);
       }
-      fxTimers = [];
+      fxTimers.clear();
       fxLayer.replaceChildren();
     },
     setInteractive(on) {
