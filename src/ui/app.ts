@@ -75,6 +75,7 @@ const TEMPLATE = `
     <section class="leaderboard" aria-labelledby="leaderboard-title" data-ref="leaderboard">
       <h2 id="leaderboard-title">Your best wins</h2>
       <div class="leaderboard-levels" data-ref="leaderboardLevels"></div>
+      <p class="lb-message" data-ref="leaderboardMessage" role="status"></p>
       <button type="button" class="link-button" data-ref="clearScores">Clear scores</button>
     </section>
   </section>
@@ -194,6 +195,7 @@ export function mountApp(
     endStats: ref(root, 'endStats'),
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
     leaderboardLevels: ref(root, 'leaderboardLevels'),
+    leaderboardMessage: ref(root, 'leaderboardMessage'),
     clearScores: ref<HTMLButtonElement>(root, 'clearScores'),
   };
 
@@ -373,9 +375,13 @@ export function mountApp(
     if (!window.confirm('Clear all your saved scores?')) {
       return;
     }
-    clearLeaderboard(store);
-    leaderboard = emptyLeaderboard();
-    renderLeaderboard();
+    if (clearLeaderboard(store)) {
+      leaderboard = emptyLeaderboard();
+      el.leaderboardMessage.textContent = '';
+      renderLeaderboard();
+    } else {
+      el.leaderboardMessage.textContent = "Couldn't clear scores in this browser.";
+    }
   });
 
   function renderLeaderboard(): void {

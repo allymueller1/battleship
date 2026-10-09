@@ -500,8 +500,7 @@ describe('the local leaderboard', () => {
   });
 
   it('dates a win in local time, not UTC', () => {
-    const proc = (globalThis as { process?: { env: Record<string, string | undefined> } })
-      .process!;
+    const proc = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!;
     const previousTz = proc.env.TZ;
     proc.env.TZ = 'America/New_York';
     vi.useFakeTimers();
@@ -523,8 +522,32 @@ describe('the local leaderboard', () => {
       root.remove();
     }
   });
-});
 
+  it('keeps scores listed and says so when clearing fails', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    store.removeItem = () => {
+      throw new Error('denied');
+    };
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      ref<HTMLButtonElement>(root, 'clearScores').click();
+      const strikes = Array.from(
+        root.querySelectorAll<HTMLElement>('.leaderboard-level .lb-strikes'),
+      ).map((el) => el.textContent);
+      expect(strikes).toEqual(['25 strikes']);
+      expect(ref(root, 'leaderboardMessage').textContent).toBe(
+        "Couldn't clear scores in this browser.",
+      );
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});
 describe('randomizing while a ship is being dragged', () => {
   it('cancels the drag so a late pointerup does nothing', () => {
     vi.useFakeTimers();

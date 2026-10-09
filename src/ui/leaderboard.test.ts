@@ -120,8 +120,20 @@ describe('saveLeaderboard and clearLeaderboard', () => {
 
   it('clears stored scores', () => {
     const store = fakeStore(JSON.stringify({ easy: [{ strikes: 42, date: '2026-10-10' }] }));
-    clearLeaderboard(store);
+    expect(clearLeaderboard(store)).toBe(true);
     expect(loadLeaderboard(store)).toEqual(emptyLeaderboard());
+  });
+
+  it('reports false when removeItem throws and true with no store', () => {
+    const store: ScoreStore = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {
+        throw new Error('denied');
+      },
+    };
+    expect(clearLeaderboard(store)).toBe(false);
+    expect(clearLeaderboard(null)).toBe(true);
   });
 
   it('does not throw when setItem or removeItem throw', () => {

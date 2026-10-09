@@ -106,12 +106,13 @@ export function saveLeaderboard(store: ScoreStore | null, board: Leaderboard): v
   }
 }
 
-/** Wipes stored scores; storage failures are ignored. */
-export function clearLeaderboard(store: ScoreStore | null): void {
+/** Wipes stored scores. False when storage refuses; true otherwise. */
+export function clearLeaderboard(store: ScoreStore | null): boolean {
   try {
     store?.removeItem(LEADERBOARD_KEY);
+    return true;
   } catch {
-    // As above.
+    return false;
   }
 }
 

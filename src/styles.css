@@ -1250,3 +1250,13 @@ button.primary:hover:not(:disabled) {
 .board--dragging .cell {
   cursor: grabbing;
 }
+
+.lb-message {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--lose);
+}
+.lb-message:empty {
+  display: none;
+}
