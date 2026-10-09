@@ -1,29 +1,32 @@
-# Battleship
+# Nebula Strike
 
-Play the classic board game Battleship against a computer opponent in your browser.
+An intergalactic take on Battleship: find and destroy the computer's fleet before it destroys yours.
 
 [![Test and deploy](https://github.com/allymueller1/battleship/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/allymueller1/battleship/actions/workflows/deploy.yml)
 
 **Play it live: https://allymueller1.github.io/battleship/**
 
-![A game in progress: enemy waters on the left, your fleet on the right](docs/screenshot.png)
+![A game in progress: the enemy sector on the left, your fleet on the right](docs/screenshot.png)
 
 ## How to play
 
-1. Pick a level card — Easy, Normal or Hard — and press **Start**.
-2. Place your fleet: choose a ship, then click or tap a cell. The preview is
+1. Press **Launch** on the title screen (any key or click skips the
+   briefing), then pick a mission card — Cadet, Captain or Admiral — and
+   press **Start mission**.
+2. Deploy your fleet: choose a ship, then click or tap a cell. The preview is
    green where the ship fits and red where it doesn't. **Rotate** (or press
-   **R**) turns the ship, **Randomize** places the whole fleet for you, and
+   **R**) turns the ship, **Randomize** deploys the whole fleet for you, and
    selecting a placed ship picks it back up so you can move it. The
-   **Change** link takes you back to the level cards without losing your
+   **Change** link takes you back to the mission cards without losing your
    ships.
-3. Press **Start battle**, then fire at cells on the **Enemy waters** board.
-   A miss is a dot, a hit is a marker, and a sunk ship turns solid red. The
-   fleet trackers show which of your ships and the enemy's are still afloat.
-   The status area keeps your last shot and the computer's last shot on
-   separate lines.
-4. When a game ends, the end screen shows the result plus each side's shots
-   and hits. **Play again** or **New game** starts over on the same level.
+3. Press **Start battle**, then strike cells on the **Enemy sector** board.
+   A miss is a dot, a hit is a marker, and a destroyed ship glows orange
+   and shows as a wreck. The fleet trackers show which of your ships and the
+   enemy's are still afloat. The status area keeps your last strike and the
+   enemy's last strike on separate lines.
+4. When a battle ends, the end screen shows the result plus each side's
+   strikes and hits. **Play again** or **New game** starts over on the same
+   mission.
 
 Keyboard: **Tab** moves between controls and boards, **arrow keys** move
 within a board (and between level cards), **Enter** or **Space** fires or
@@ -31,11 +34,11 @@ places, and **R** rotates the selected ship on the placement screen.
 
 ## How the computer plays
 
-| Level  | Style                                                          | Mechanism                                                                                                                                 | Average shots to win |
-| ------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| Easy   | Fires at random and finds your ships by luck.                  | Picks a uniformly random untried cell.                                                                                                    | ~96                  |
-| Normal | Plays like a sensible human.                                   | Hunts on a checkerboard pattern; after a hit it probes the neighbours, follows the line until the ship sinks, and handles touching ships. | ~52                  |
-| Hard   | Calculates where your ships most likely are before every shot. | Counts every legal placement of the remaining ships, weights placements through unresolved hits, and fires at the densest cell.           | ~43                  |
+| Level            | Style                                                            | Mechanism                                                                                                                                 | Average shots to win |
+| ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Cadet (Easy)     | Fires at random and finds you by luck.                           | Picks a uniformly random untried cell.                                                                                                    | ~96                  |
+| Captain (Normal) | Sweeps the sector, then hunts down any ship it hits.             | Hunts on a checkerboard pattern; after a hit it probes the neighbours, follows the line until the ship sinks, and handles touching ships. | ~52                  |
+| Admiral (Hard)   | Calculates where your ships most likely are before every strike. | Counts every legal placement of the remaining ships, weights placements through unresolved hits, and fires at the densest cell.           | ~43                  |
 
 Averages measured over 200 simulated games per level. No level can see your
 ships — each only knows its own hits, misses and sunk ships — and none ever
@@ -48,7 +51,7 @@ fires at the same cell twice.
 - Vitest with v8 coverage, 90% thresholds on the game logic and pure UI modules (see `vite.config.ts`)
 - ESLint + Prettier
 - GitHub Actions + GitHub Pages
-- Inter, self-hosted via `@fontsource-variable/inter`
+- Inter and Orbitron, self-hosted via `@fontsource-variable/inter` and `@fontsource/orbitron`
 - No backend — it's a static site
 
 ## Run it locally
@@ -102,9 +105,13 @@ The layout separates pure game logic from DOM rendering:
 - `src/ui/boardView.ts` — accessible, keyboard-navigable board grid
 - `src/ui/fleetTracker.ts` — afloat/sunk list per side
 - `src/ui/interactivity.ts` — decides which board accepts input in each phase
-- `src/ui/levels.ts` — level names, descriptions and average shots for the intro cards
+- `src/ui/levels.ts` — mission names, descriptions and average shots for the mission cards
 - `src/ui/placement.ts` — pure placement state
 - `src/ui/messages.ts` — status and shot message text
+- `src/ui/theme.ts` — the space-themed display name for each ship type
+- `src/ui/titleScreen.ts` — the title screen and its skippable typed briefing
+- `src/ui/effects.ts` — which cells get strike effects, and the effect timings
+- `src/ui/shipArt.ts` — the SVG art for each ship type
 
 All of `src/game/` is pure, immutable logic tested with Vitest; tests live
 next to their modules as `<module>.test.ts`. `DEBUGGING.md` is a log of
