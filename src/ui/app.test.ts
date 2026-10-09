@@ -299,3 +299,128 @@ describe('dragging a placed ship', () => {
     }
   });
 });
+
+describe('the local leaderboard', () => {
+  function fakeStore(initial: string | null = null) {
+    const data = new Map<string, string>();
+    if (initial !== null) {
+      data.set('nebula-strike:leaderboard:v1', initial);
+    }
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => data.set(key, String(value)),
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    };
+  }
+
+  function toIntro(root: HTMLElement, store: ReturnType<typeof fakeStore>): void {
+    mountApp(root, createRng(7), { storage: store });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+    root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+  }
+
+  it('saves a win and shows its rank in the end screen', () => {
+    vi.useFakeTimers();
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      const cadet = root.querySelector<HTMLInputElement>('input[value="easy"]')!;
+      cadet.checked = true;
+      cadet.dispatchEvent(new Event('change'));
+      root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="start"]')!.click();
+
+      // Sweep every enemy cell until the player wins.
+      for (let row = 0; row < 10 && !statusText(root).includes('Victory!'); row++) {
+        for (let col = 0; col < 10 && !statusText(root).includes('Victory!'); col++) {
+          enemyCell(root, row, col).click();
+          if (isOver(root)) {
+            break;
+          }
+          vi.advanceTimersByTime(COMPUTER_DELAY_MS);
+          if (isOver(root)) {
+            break;
+          }
+        }
+      }
+      expect(statusText(root)).toContain('Victory!');
+
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+      const rank = ref(root, 'endRank');
+      expect(rank.hidden).toBe(false);
+      expect(rank.textContent).toBe('New best on Cadet!');
+
+      const saved = JSON.parse(store.data.get('nebula-strike:leaderboard:v1')!);
+      expect(saved.easy).toHaveLength(1);
+      expect(saved.easy[0].strikes).toBeGreaterThanOrEqual(17);
+      expect(saved.easy[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('renders stored wins per level and "No wins yet" for empty ones', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      const levels = Array.from(
+        root.querySelectorAll<HTMLElement>('[data-ref="leaderboardLevels"] .leaderboard-level'),
+      );
+      expect(levels.map((l) => l.querySelector('h3')!.textContent)).toEqual([
+        'Cadet',
+        'Captain',
+        'Admiral',
+      ]);
+      expect(levels[0]!.querySelector('.lb-strikes')!.textContent).toBe('25 strikes');
+      expect(levels[0]!.querySelector('.lb-date')!.textContent).toContain('2026');
+      expect(levels[1]!.querySelector('.lb-empty')!.textContent).toBe('No wins yet');
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('clears all scores after confirmation', () => {
+    vi.useFakeTimers();
+    const store = fakeStore(JSON.stringify({ easy: [{ strikes: 25, date: '2026-10-09' }] }));
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      ref<HTMLButtonElement>(root, 'clearScores').click();
+      expect(store.data.has('nebula-strike:leaderboard:v1')).toBe(false);
+      expect(root.querySelectorAll('.lb-empty')).toHaveLength(3);
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('shows empty lists for corrupt stored data without throwing', () => {
+    vi.useFakeTimers();
+    const store = fakeStore('{{{corrupt');
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      expect(root.querySelectorAll('.lb-empty')).toHaveLength(3);
+      expect(ref<HTMLButtonElement>(root, 'clearScores').hidden).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});

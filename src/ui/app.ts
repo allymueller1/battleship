@@ -33,6 +33,17 @@ import {
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
+import {
+  addScore,
+  browserStore,
+  clearLeaderboard,
+  emptyLeaderboard,
+  loadLeaderboard,
+  rankMessage,
+  saveLeaderboard,
+  type Leaderboard,
+  type ScoreStore,
+} from './leaderboard';
 import { effectForShot, SHAKE_MS, VICTORY_DELAY_MS } from './effects';
 import { shipDisplayName } from './theme';
 import { BRIEFING_LINES, createTitleScreen } from './titleScreen';
@@ -59,6 +70,11 @@ const TEMPLATE = `
     </fieldset>
     <p class="intro-note">No level can see your ships. Each one only knows its own hits and misses. A good human player usually needs about 50 to 60 shots.</p>
     <button type="button" class="primary intro-start" data-ref="introStart">Start mission</button>
+    <section class="leaderboard" aria-labelledby="leaderboard-title" data-ref="leaderboard">
+      <h2 id="leaderboard-title">Your best wins</h2>
+      <div class="leaderboard-levels" data-ref="leaderboardLevels"></div>
+      <button type="button" class="link-button" data-ref="clearScores">Clear scores</button>
+    </section>
   </section>
   <header class="top" data-ref="top">
     <h1>Nebula Strike</h1>
@@ -95,6 +111,7 @@ const TEMPLATE = `
   <dialog class="end" aria-labelledby="end-title" aria-describedby="end-text" data-ref="endDialog">
     <h2 id="end-title" data-ref="endTitle"></h2>
     <p id="end-text" class="end-text" data-ref="endText"></p>
+    <p class="end-rank" data-ref="endRank" hidden></p>
     <dl class="end-stats" data-ref="endStats"></dl>
     <button type="button" class="primary" data-ref="playAgain" autofocus>Play again</button>
   </dialog>
@@ -130,6 +147,7 @@ function shipSprite(ship: PlacedShip, state: 'intact' | 'wreck'): ShipSprite {
 
 export interface MountOptions {
   readonly reducedMotion?: () => boolean;
+  readonly storage?: ScoreStore | null;
 }
 
 /** Wires the pure game logic to the DOM. `rng` is injectable so tests can seed it. */
@@ -141,6 +159,9 @@ export function mountApp(
   const reducedMotion =
     options.reducedMotion ??
     (() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const store = options.storage === undefined ? browserStore() : options.storage;
+  let leaderboard: Leaderboard = loadLeaderboard(store);
+  let lastRank: number | null = null;
   root.innerHTML = TEMPLATE;
   const el = {
     newGame: ref<HTMLButtonElement>(root, 'newGame'),
@@ -167,8 +188,11 @@ export function mountApp(
     endDialog: ref<HTMLDialogElement>(root, 'endDialog'),
     endTitle: ref(root, 'endTitle'),
     endText: ref(root, 'endText'),
+    endRank: ref(root, 'endRank'),
     endStats: ref(root, 'endStats'),
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
+    leaderboardLevels: ref(root, 'leaderboardLevels'),
+    clearScores: ref<HTMLButtonElement>(root, 'clearScores'),
   };
 
   let screen: 'title' | 'intro' | 'game' = 'title';
@@ -332,6 +356,53 @@ export function mountApp(
   });
   el.newGame.addEventListener('click', reset);
   el.playAgain.addEventListener('click', reset);
+  el.clearScores.addEventListener('click', () => {
+    if (!window.confirm('Clear all your saved scores?')) {
+      return;
+    }
+    clearLeaderboard(store);
+    leaderboard = emptyLeaderboard();
+    renderLeaderboard();
+  });
+
+  function renderLeaderboard(): void {
+    el.leaderboardLevels.replaceChildren(
+      ...LEVELS.map((level) => {
+        const section = document.createElement('div');
+        section.className = 'leaderboard-level';
+        const heading = document.createElement('h3');
+        heading.textContent = level.name;
+        section.append(heading);
+        const entries = leaderboard[level.level];
+        if (entries.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'lb-empty';
+          empty.textContent = 'No wins yet';
+          section.append(empty);
+        } else {
+          const list = document.createElement('ol');
+          for (const entry of entries) {
+            const item = document.createElement('li');
+            const strikes = document.createElement('span');
+            strikes.className = 'lb-strikes';
+            strikes.textContent = `${entry.strikes} strikes`;
+            const date = document.createElement('span');
+            date.className = 'lb-date';
+            date.textContent = new Date(`${entry.date}T00:00:00`).toLocaleDateString(undefined, {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            });
+            item.append(strikes, ' ', date);
+            list.append(item);
+          }
+          section.append(list);
+        }
+        return section;
+      }),
+    );
+    el.clearScores.hidden = LEVELS.every((level) => leaderboard[level.level].length === 0);
+  }
 
   document.addEventListener('keydown', (event) => {
     if (screen !== 'game' || game.phase !== 'placing' || event.key.toLowerCase() !== 'r') {
@@ -410,6 +481,16 @@ export function mountApp(
   function scheduleEnd(): void {
     const won = game.winner === 'player';
     root.classList.add(won ? 'fx-victory' : 'fx-defeat');
+    if (won) {
+      const scored = addScore(leaderboard, difficulty, {
+        strikes: game.computerBoard.shots.size,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      leaderboard = scored.board;
+      lastRank = scored.rank;
+      saveLeaderboard(store, leaderboard);
+      renderLeaderboard();
+    }
     endTimer = setTimeout(showEnd, won ? VICTORY_DELAY_MS : END_SCREEN_DELAY_MS);
   }
 
@@ -417,6 +498,9 @@ export function mountApp(
     const summary = endSummary(game, levelName(difficulty));
     el.endTitle.textContent = summary.title;
     el.endText.textContent = summary.text;
+    const rankText = rankMessage(lastRank, levelName(difficulty));
+    el.endRank.textContent = rankText;
+    el.endRank.hidden = rankText === '';
     el.endStats.replaceChildren(
       ...[
         ['Your strikes', summary.player.shots],
@@ -460,6 +544,8 @@ export function mountApp(
     playerResult = '';
     computerResult = '';
     note = '';
+    lastRank = null;
+    el.endRank.hidden = true;
     render();
     shipButtons[0]?.button.focus();
   }
@@ -576,5 +662,6 @@ export function mountApp(
   });
   titleScreen.start();
 
+  renderLeaderboard();
   render();
 }
