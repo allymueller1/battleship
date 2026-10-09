@@ -37,6 +37,8 @@ export interface BoardView {
   setShips(ships: readonly ShipSprite[]): void;
   spawnEffect(kind: EffectKind, cells: readonly Coord[], particles: boolean): void;
   clearEffects(): void;
+  /** Drops any in-progress pointer drag without calling its handlers. */
+  cancelDrag(): void;
   focus(): void;
 }
 
@@ -194,6 +196,7 @@ export function createBoardView(options: BoardViewOptions): BoardView {
 
   let shipKey = '';
   const fxTimers = new Set<ReturnType<typeof setTimeout>>();
+  let resetDrag: () => void = () => {};
 
   if (options.drag) {
     const handlers = options.drag;
@@ -223,7 +226,7 @@ export function createBoardView(options: BoardViewOptions): BoardView {
       return { row: Number(el.dataset.row), col: Number(el.dataset.col) };
     };
 
-    const resetDrag = (): void => {
+    resetDrag = (): void => {
       pointerId = null;
       startCell = null;
       lastCell = null;
@@ -298,6 +301,9 @@ export function createBoardView(options: BoardViewOptions): BoardView {
 
   return {
     element: wrap,
+    cancelDrag() {
+      resetDrag();
+    },
     update(cell) {
       for (let row = 0; row < BOARD_SIZE; row++) {
         for (let col = 0; col < BOARD_SIZE; col++) {

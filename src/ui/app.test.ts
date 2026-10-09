@@ -499,3 +499,55 @@ describe('the local leaderboard', () => {
     }
   });
 });
+
+describe('randomizing while a ship is being dragged', () => {
+  it('cancels the drag so a late pointerup does nothing', () => {
+    vi.useFakeTimers();
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountApp(root, createRng(7));
+    const errors: string[] = [];
+    window.addEventListener('error', (e) => errors.push(String(e.error ?? e.message)));
+    try {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x' }));
+      root.querySelector<HTMLButtonElement>('[data-ref="launch"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="introStart"]')!.click();
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+
+      const board = '[data-ref="playerBoard"]';
+      const grid = root.querySelector(`${board} [role="grid"]`)!;
+      const cellAt = (r: number, c: number) =>
+        root.querySelector<HTMLElement>(`${board} .cell[data-row="${r}"][data-col="${c}"]`)!;
+      const mk = (t: string) => {
+        const e = new MouseEvent(t, { bubbles: true, button: 0 });
+        Object.defineProperty(e, 'pointerId', { value: 1 });
+        return e;
+      };
+      const start = root.querySelector<HTMLElement>(`${board} .cell.ship`)!;
+      const dest = cellAt(9, 9);
+      document.elementFromPoint = () => dest;
+      start.dispatchEvent(mk('pointerdown'));
+      grid.dispatchEvent(mk('pointermove'));
+
+      // Randomize mid-drag, then the stale finger lifts.
+      root.querySelector<HTMLButtonElement>('[data-ref="randomize"]')!.click();
+      grid.dispatchEvent(mk('pointerup'));
+
+      expect(errors).toEqual([]);
+      const sprites = Array.from(root.querySelectorAll<HTMLElement>(`${board} .ship-sprite`));
+      expect(sprites).toHaveLength(5);
+      const types = sprites.map((el) =>
+        Array.from(el.classList).find(
+          (c) =>
+            c.startsWith('ship-sprite--') &&
+            c !== 'ship-sprite--horizontal' &&
+            c !== 'ship-sprite--vertical',
+        )!,
+      );
+      expect(new Set(types).size).toBe(5);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+});

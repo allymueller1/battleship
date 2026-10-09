@@ -115,9 +115,22 @@ export function dropDrag(
   drag: Drag,
   origin: Coord | null,
 ): { state: PlacementState; snappedBack: boolean } {
+  // The ship may already be back on the board if something replaced the
+  // placement while this drag was still live.
+  if (state.board.ships.some((s) => s.type === drag.type)) {
+    return { state, snappedBack: false };
+  }
   if (origin && validatePlacement(state.board, drag.type, origin, state.orientation) === null) {
     const board = placeShip(state.board, drag.type, origin, state.orientation);
     return { state: { ...state, board, selected: nextUnplaced(board) }, snappedBack: false };
+  }
+  // The snap-back spot may no longer be free either; leave the ship unplaced
+  // and selected rather than throwing.
+  if (validatePlacement(state.board, drag.type, drag.from, drag.orientation) !== null) {
+    return {
+      state: { ...state, selected: drag.type, orientation: drag.orientation },
+      snappedBack: true,
+    };
   }
   const board = placeShip(state.board, drag.type, drag.from, drag.orientation);
   return {

@@ -287,6 +287,7 @@ export function mountApp(
     const label = document.createElement('span');
     button.append(icon, label);
     button.addEventListener('click', () => {
+      cancelActiveDrag();
       placement = selectShip(placement, spec.type);
       note = '';
       render();
@@ -331,6 +332,7 @@ export function mountApp(
   });
 
   el.changeLevel.addEventListener('click', () => {
+    cancelActiveDrag();
     screen = 'intro';
     render();
     el.levelCards.querySelector<HTMLInputElement>('input:checked')?.focus();
@@ -341,11 +343,13 @@ export function mountApp(
     render();
   });
   el.randomize.addEventListener('click', () => {
+    cancelActiveDrag();
     placement = randomizePlacement(placement, rng);
     note = 'Fleet deployed at random. Start the battle, or select a ship to move it.';
     render();
   });
   el.start.addEventListener('click', () => {
+    cancelActiveDrag();
     if (!isFleetComplete(placement.board)) {
       return;
     }
@@ -423,10 +427,22 @@ export function mountApp(
     render();
   });
 
+  /** A live pointer drag can't survive the board changing under it. */
+  function cancelActiveDrag(): void {
+    if (!drag) {
+      return;
+    }
+    placement = dropDrag(placement, drag, null).state;
+    drag = null;
+    hover = null;
+    playerView.cancelDrag();
+  }
+
   function onPlayerCell(c: Coord): void {
     if (game.phase !== 'placing') {
       return;
     }
+    cancelActiveDrag();
     const picked = placement.selected ? null : pickUpAt(placement, c);
     if (picked) {
       placement = picked;
@@ -548,6 +564,7 @@ export function mountApp(
       el.endDialog.close();
     }
     game = createGame(rng);
+    cancelActiveDrag();
     placement = initialPlacement();
     hover = null;
     drag = null;
