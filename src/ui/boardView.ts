@@ -1,4 +1,5 @@
-import { BOARD_SIZE, type Coord } from '../game/types';
+import { BOARD_SIZE, type Coord, type Orientation, type ShipType } from '../game/types';
+import { shipSvg } from './shipArt';
 
 export interface CellView {
   readonly classes: readonly string[];
@@ -11,10 +12,19 @@ export interface BoardViewOptions {
   readonly onHover?: (coord: Coord | null) => void;
 }
 
+export interface ShipSprite {
+  readonly type: ShipType;
+  readonly origin: Coord;
+  readonly orientation: Orientation;
+  readonly length: number;
+  readonly state: 'intact' | 'wreck';
+}
+
 export interface BoardView {
   readonly element: HTMLElement;
   update(cell: (coord: Coord) => CellView): void;
   setInteractive(interactive: boolean): void;
+  setShips(ships: readonly ShipSprite[]): void;
   focus(): void;
 }
 
@@ -46,6 +56,8 @@ function header(role: string, text: string): HTMLElement {
  * arrow keys / Home / End move between cells, Enter or Space activates.
  */
 export function createBoardView(options: BoardViewOptions): BoardView {
+  const wrap = document.createElement('div');
+  wrap.className = 'board-wrap';
   const grid = document.createElement('div');
   grid.className = 'board';
   grid.setAttribute('role', 'grid');
@@ -156,10 +168,20 @@ export function createBoardView(options: BoardViewOptions): BoardView {
     }
   });
 
+  const shipLayer = document.createElement('div');
+  shipLayer.className = 'ship-layer';
+  shipLayer.setAttribute('aria-hidden', 'true');
+  const fxLayer = document.createElement('div');
+  fxLayer.className = 'fx-layer';
+  fxLayer.setAttribute('aria-hidden', 'true');
+  wrap.append(grid, shipLayer, fxLayer);
+
+  let shipKey = '';
+
   syncTabIndex();
 
   return {
-    element: grid,
+    element: wrap,
     update(cell) {
       for (let row = 0; row < BOARD_SIZE; row++) {
         for (let col = 0; col < BOARD_SIZE; col++) {
@@ -174,6 +196,26 @@ export function createBoardView(options: BoardViewOptions): BoardView {
           }
         }
       }
+    },
+    setShips(ships) {
+      const key = ships
+        .map((s) => `${s.type}:${s.origin.row},${s.origin.col}:${s.orientation}:${s.state}`)
+        .join('|');
+      if (key === shipKey) {
+        return;
+      }
+      shipKey = key;
+      shipLayer.replaceChildren(
+        ...ships.map((s) => {
+          const el = document.createElement('div');
+          el.className = `ship-sprite ship-sprite--${s.type} ship-sprite--${s.state} ship-sprite--${s.orientation}`;
+          el.style.setProperty('--row', String(s.origin.row));
+          el.style.setProperty('--col', String(s.origin.col));
+          el.style.setProperty('--len', String(s.length));
+          el.innerHTML = shipSvg(s.type);
+          return el;
+        }),
+      );
     },
     setInteractive(on) {
       interactive = on;

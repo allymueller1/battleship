@@ -3,10 +3,11 @@ import { isFleetComplete, shipAt } from '../game/board';
 import { coordKey } from '../game/coord';
 import { createGame, fire, startGame, type GameState } from '../game/game';
 import type { Rng } from '../game/rng';
-import { FLEET } from '../game/ships';
+import { FLEET, getShipSpec } from '../game/ships';
 import { isShipSunk } from '../game/shots';
-import type { Board, Coord } from '../game/types';
-import { createBoardView, type CellView } from './boardView';
+import type { Board, Coord, PlacedShip } from '../game/types';
+import { createBoardView, type CellView, type ShipSprite } from './boardView';
+import { shipSvg } from './shipArt';
 import { LEVELS, levelName } from './levels';
 import { createFleetTracker } from './fleetTracker';
 import {
@@ -112,6 +113,16 @@ function sunkCellKeys(board: Board): Set<string> {
   return keys;
 }
 
+function shipSprite(ship: PlacedShip, state: 'intact' | 'wreck'): ShipSprite {
+  return {
+    type: ship.type,
+    origin: ship.origin,
+    orientation: ship.orientation,
+    length: getShipSpec(ship.type).length,
+    state,
+  };
+}
+
 export interface MountOptions {
   readonly reducedMotion?: () => boolean;
 }
@@ -189,13 +200,19 @@ export function mountApp(
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ship-button';
+    const icon = document.createElement('span');
+    icon.className = 'ship-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = shipSvg(spec.type);
+    const label = document.createElement('span');
+    button.append(icon, label);
     button.addEventListener('click', () => {
       placement = selectShip(placement, spec.type);
       note = '';
       render();
     });
     el.shipList.append(button);
-    return { spec, button };
+    return { spec, button, label };
   });
 
   for (const { level, name, description, averageShots } of LEVELS) {
@@ -436,18 +453,29 @@ export function mountApp(
     const interactivity = boardInteractivity(game);
     playerView.setInteractive(interactivity.player);
     enemyView.setInteractive(interactivity.enemy);
+
+    const playerBoard = placing ? placement.board : game.playerBoard;
+    playerView.setShips(
+      playerBoard.ships.map((s) => shipSprite(s, isShipSunk(playerBoard, s) ? 'wreck' : 'intact')),
+    );
+    enemyView.setShips(
+      game.computerBoard.ships
+        .filter((s) => isShipSunk(game.computerBoard, s) || game.phase === 'over')
+        .map((s) => shipSprite(s, isShipSunk(game.computerBoard, s) ? 'wreck' : 'intact')),
+    );
+
     playerView.update(playerCell);
     enemyView.update(enemyCell);
     playerTracker.update(game.playerBoard);
     enemyTracker.update(game.computerBoard);
 
-    for (const { spec, button } of shipButtons) {
+    for (const { spec, button, label } of shipButtons) {
       const placed = placement.board.ships.some((s) => s.type === spec.type);
       const selected = placement.selected === spec.type;
       button.setAttribute('aria-pressed', String(selected));
       button.classList.toggle('placed', placed);
       const name = shipDisplayName(spec.type);
-      button.textContent = `${name} (${spec.length})${placed ? ' ✓' : ''}`;
+      label.textContent = `${name} (${spec.length})${placed ? ' ✓' : ''}`;
       button.setAttribute(
         'aria-label',
         `${name}, length ${spec.length}, ${placed ? 'placed' : 'not placed'}`,

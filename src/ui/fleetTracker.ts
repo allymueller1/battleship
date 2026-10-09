@@ -2,6 +2,7 @@ import { fleetStatus } from '../game/shots';
 import { FLEET } from '../game/ships';
 import type { Board } from '../game/types';
 import { shipDisplayName } from './theme';
+import { shipSvg } from './shipArt';
 
 export interface FleetTracker {
   readonly element: HTMLElement;
@@ -19,16 +20,16 @@ export function createFleetTracker(title: string): FleetTracker {
 
   const items = FLEET.map((spec) => {
     const li = document.createElement('li');
+    const icon = document.createElement('span');
+    icon.className = 'ship-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = shipSvg(spec.type);
     const name = document.createElement('span');
     name.className = 'tracker-name';
     name.textContent = shipDisplayName(spec.type);
-    const pips = document.createElement('span');
-    pips.className = 'tracker-pips';
-    pips.setAttribute('aria-hidden', 'true');
-    pips.textContent = '■'.repeat(spec.length);
     const state = document.createElement('span');
     state.className = 'tracker-state';
-    li.append(name, pips, state);
+    li.append(icon, name, state);
     list.append(li);
     return { li, state };
   });
