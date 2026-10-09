@@ -82,6 +82,7 @@ body {
 
 #app {
   position: relative;
+  isolation: isolate;
   max-width: 72rem;
   margin: 0 auto;
   padding: var(--app-pad);
