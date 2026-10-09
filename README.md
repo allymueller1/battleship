@@ -25,8 +25,7 @@ An intergalactic take on Battleship: find and destroy the computer's fleet befor
    enemy's are still afloat. The status area keeps your last strike and the
    enemy's last strike on separate lines.
 4. When a battle ends, the end screen shows the result plus each side's
-   strikes and hits. **Play again** or **New game** starts over on the same
-   mission.
+   strikes and hits. **Play again** starts over on the same mission.
 
 Keyboard: **Tab** moves between controls and boards, **arrow keys** move
 within a board (and between level cards), **Enter** or **Space** fires or
