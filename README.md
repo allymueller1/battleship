@@ -16,7 +16,8 @@ An intergalactic take on Battleship: find and destroy the computer's fleet befor
 2. Deploy your fleet: choose a ship, then click or tap a cell. The preview is
    green where the ship fits and red where it doesn't. **Rotate** (or press
    **R**) turns the ship, **Randomize** deploys the whole fleet for you, and
-   selecting a placed ship picks it back up so you can move it. The
+   you can drag a placed ship to a new spot (or select it to pick it back
+   up). The
    **Change** link takes you back to the mission cards without losing your
    ships.
 3. Press **Start battle**, then strike cells on the **Enemy sector** board.
@@ -26,6 +27,9 @@ An intergalactic take on Battleship: find and destroy the computer's fleet befor
    enemy's last strike on separate lines.
 4. When a battle ends, the end screen shows the result plus each side's
    strikes and hits. **Play again** starts over on the same mission.
+
+Your five fastest wins per level are kept on the mission-select screen —
+saved only in this browser. **Clear scores** wipes them.
 
 Keyboard: **Tab** moves between controls and boards, **arrow keys** move
 within a board (and between level cards), **Enter** or **Space** fires or
@@ -105,6 +109,7 @@ The layout separates pure game logic from DOM rendering:
 - `src/ui/fleetTracker.ts` — afloat/sunk list per side
 - `src/ui/interactivity.ts` — decides which board accepts input in each phase
 - `src/ui/levels.ts` — mission names, descriptions and average shots for the mission cards
+- `src/ui/leaderboard.ts` — the localStorage-backed leaderboard of your fastest wins
 - `src/ui/placement.ts` — pure placement state
 - `src/ui/messages.ts` — status and shot message text
 - `src/ui/theme.ts` — the space-themed display name for each ship type
