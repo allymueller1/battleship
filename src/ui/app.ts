@@ -22,7 +22,6 @@ import {
   dragOrigin,
   dropDrag,
   initialPlacement,
-  pickUpAt,
   placeSelected,
   previewAt,
   randomizePlacement,
@@ -91,7 +90,7 @@ const TEMPLATE = `
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
       <h2 id="setup-title">Deploy your fleet</h2>
-      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Drag a placed ship to move it, or select it and choose a new cell.</p>
+      <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Drag a placed ship to move it, or select it and choose a new cell. Press Escape to put it back.</p>
       <div class="ship-list" role="group" aria-label="Ships" data-ref="shipList"></div>
       <div class="controls">
         <button type="button" data-ref="rotate">Rotate</button>
@@ -208,6 +207,8 @@ export function mountApp(
   let computerResult = '';
   let note = '';
   let drag: Drag | null = null;
+  // A ship lifted by tap or the ship list, pending placement or restoration.
+  let pickedUp: Drag | null = null;
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
   let shakeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -228,6 +229,7 @@ export function mountApp(
     drag: {
       canStart: (c) => game.phase === 'placing' && shipAt(placement.board, c) !== undefined,
       onStart: (c) => {
+        restorePickedUp();
         const started = startDrag(placement, c);
         if (!started) {
           return;
@@ -291,6 +293,11 @@ export function mountApp(
     button.append(icon, label);
     button.addEventListener('click', () => {
       cancelActiveDrag();
+      restorePickedUp();
+      const placed = placement.board.ships.find((s) => s.type === spec.type);
+      pickedUp = placed
+        ? { type: placed.type, from: placed.origin, orientation: placed.orientation, grab: 0 }
+        : null;
       placement = selectShip(placement, spec.type);
       note = '';
       render();
@@ -347,6 +354,7 @@ export function mountApp(
   });
   el.randomize.addEventListener('click', () => {
     cancelActiveDrag();
+    pickedUp = null;
     placement = randomizePlacement(placement, rng);
     note = 'Fleet deployed at random. Start the battle, or select a ship to move it.';
     render();
@@ -424,7 +432,16 @@ export function mountApp(
   }
 
   document.addEventListener('keydown', (event) => {
-    if (screen !== 'game' || game.phase !== 'placing' || event.key.toLowerCase() !== 'r') {
+    if (screen !== 'game' || game.phase !== 'placing') {
+      return;
+    }
+    if (event.key === 'Escape') {
+      cancelActiveDrag();
+      restorePickedUp();
+      render();
+      return;
+    }
+    if (event.key.toLowerCase() !== 'r') {
       return;
     }
     if (event.ctrlKey || event.metaKey || event.altKey) {
@@ -433,6 +450,15 @@ export function mountApp(
     placement = rotate(placement);
     render();
   });
+
+  /** A ship lifted by tap or the list goes back where it was. */
+  function restorePickedUp(): void {
+    if (!pickedUp) {
+      return;
+    }
+    placement = dropDrag(placement, pickedUp, null).state;
+    pickedUp = null;
+  }
 
   /** A live pointer drag can't survive the board changing under it. */
   function cancelActiveDrag(): void {
@@ -450,15 +476,19 @@ export function mountApp(
       return;
     }
     cancelActiveDrag();
-    const picked = placement.selected ? null : pickUpAt(placement, c);
+    const picked = placement.selected ? null : startDrag(placement, c);
     if (picked) {
-      placement = picked;
+      placement = picked.state;
+      pickedUp = picked.drag;
       note = '';
     } else if (shipAt(placement.board, c) && placement.selected) {
       note = placementMessage('overlap', placement.selected);
     } else {
       const { state, error } = placeSelected(placement, c);
       placement = state;
+      if (!error) {
+        pickedUp = null;
+      }
       note = error ? placementMessage(error, placement.selected) : '';
     }
     render();
@@ -572,6 +602,7 @@ export function mountApp(
     }
     game = createGame(rng);
     cancelActiveDrag();
+    pickedUp = null;
     placement = initialPlacement();
     hover = null;
     drag = null;

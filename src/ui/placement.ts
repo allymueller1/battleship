@@ -48,15 +48,6 @@ export function selectShip(state: PlacementState, type: ShipType): PlacementStat
   };
 }
 
-/** Picks up the ship covering `coord`, if any. */
-export function pickUpAt(state: PlacementState, coord: Coord): PlacementState | null {
-  const ship = shipAt(state.board, coord);
-  if (!ship) {
-    return null;
-  }
-  return selectShip(state, ship.type);
-}
-
 export function placeSelected(
   state: PlacementState,
   origin: Coord,

@@ -16,8 +16,8 @@ An intergalactic take on Battleship: find and destroy the computer's fleet befor
 2. Deploy your fleet: choose a ship, then click or tap a cell. The preview is
    green where the ship fits and red where it doesn't. **Rotate** (or press
    **R**) turns the ship, **Randomize** deploys the whole fleet for you, and
-   you can drag a placed ship to a new spot (or select it to pick it back
-   up). The
+   you can drag a placed ship to a new spot, or select it to pick it up
+   and press **Escape** to put it back. The
    **Change** link takes you back to the mission cards without losing your
    ships.
 3. Press **Start battle**, then strike cells on the **Enemy sector** board.

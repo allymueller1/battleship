@@ -6,7 +6,6 @@ import {
   dropDrag,
   initialPlacement,
   nextUnplaced,
-  pickUpAt,
   placeSelected,
   previewAt,
   randomizePlacement,
@@ -65,19 +64,7 @@ describe('placeSelected', () => {
   });
 });
 
-describe('selectShip / pickUpAt', () => {
-  it('picks a placed ship back up, keeping its orientation', () => {
-    const placed = placeSelected(rotate(initialPlacement()), { row: 0, col: 0 }).state;
-    const picked = pickUpAt(placed, { row: 3, col: 0 });
-    expect(picked?.board.ships).toHaveLength(0);
-    expect(picked?.selected).toBe('carrier');
-    expect(picked?.orientation).toBe('vertical');
-  });
-
-  it('returns null for an empty cell', () => {
-    expect(pickUpAt(initialPlacement(), { row: 5, col: 5 })).toBeNull();
-  });
-
+describe('selectShip', () => {
   it('selecting an unplaced ship just selects it', () => {
     const s = selectShip(initialPlacement(), 'destroyer');
     expect(s.selected).toBe('destroyer');

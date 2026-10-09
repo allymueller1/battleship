@@ -4,6 +4,7 @@ import { createRng } from '../game/rng';
 import { COMPUTER_DELAY_MS, END_SCREEN_DELAY_MS, mountApp, type MountOptions } from './app';
 import { SHAKE_MS, VICTORY_DELAY_MS } from './effects';
 import { LEADERBOARD_KEY } from './leaderboard';
+import { shipDisplayName } from './theme';
 
 // jsdom lacks HTMLDialogElement.showModal/close — stub them to track `open`.
 HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
@@ -254,6 +255,13 @@ describe('dragging a placed ship', () => {
     }
   }
 
+  function shipButton(root: HTMLElement, type: string): HTMLButtonElement {
+    const name = shipDisplayName(type as Parameters<typeof shipDisplayName>[0]);
+    return Array.from(
+      root.querySelectorAll<HTMLButtonElement>('[data-ref="shipList"] button'),
+    ).find((b) => b.getAttribute('aria-label')?.startsWith(`${name},`))!;
+  }
+
   it('moves a ship to a valid spot and snaps back onto an overlap', () => {
     vi.useFakeTimers();
     const root = setupPlacing();
@@ -294,6 +302,77 @@ describe('dragging a placed ship', () => {
       expect(root.querySelector('[data-ref="statusTurn"]')!.textContent).toContain(
         "didn't fit there, so it went back",
       );
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+  it('puts a tap-picked ship back when another ship is selected', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ships = placedShips(root);
+      const first = ships[0]!;
+      const other = ships.find((s) => s.type !== first.type)!;
+      // Tap the first ship's cell: it lifts off the board (4 sprites remain).
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      // Pick a different ship from the list: the first ship goes back where
+      // it was, and the new ship is now the lifted one.
+      shipButton(root, other.type).click();
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
+      expect(placedShips(root)).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('puts a tap-picked ship back on Escape', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const first = placedShips(root)[0]!;
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(placedShips(root)).toHaveLength(5);
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
+    } finally {
+      vi.useRealTimers();
+      root.remove();
+    }
+  });
+
+  it('puts a tap-picked ship back before another ship is dragged', () => {
+    vi.useFakeTimers();
+    const root = setupPlacing();
+    try {
+      const ships = placedShips(root);
+      const first = ships[0]!;
+      const other = ships.find((s) => s.type !== first.type)!;
+      playerCell(root, first.origin.row, first.origin.col).click();
+      expect(placedShips(root)).toHaveLength(4);
+      // Start dragging the other ship.
+      const grid = root.querySelector('[data-ref="playerBoard"] [role="grid"]')!;
+      const original = document.elementFromPoint;
+      document.elementFromPoint = () =>
+        playerCell(root, other.origin.row, other.origin.col === 9 ? 8 : other.origin.col + 1);
+      try {
+        playerCell(root, other.origin.row, other.origin.col).dispatchEvent(
+          pointer('pointerdown', 0, 0),
+        );
+        grid.dispatchEvent(pointer('pointermove', 10, 10));
+      } finally {
+        document.elementFromPoint = original;
+      }
+      const back = placedShips(root).find((s) => s.type === first.type)!;
+      expect(back.origin).toEqual(first.origin);
+      expect(back.horizontal).toBe(first.horizontal);
     } finally {
       vi.useRealTimers();
       root.remove();
