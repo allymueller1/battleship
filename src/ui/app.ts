@@ -40,6 +40,7 @@ import {
   emptyLeaderboard,
   LEADERBOARD_KEY,
   loadLeaderboard,
+  localDateString,
   rankMessage,
   saveLeaderboard,
   type Leaderboard,
@@ -510,7 +511,7 @@ export function mountApp(
       leaderboard = loadLeaderboard(store);
       const scored = addScore(leaderboard, difficulty, {
         strikes: game.computerBoard.shots.size,
-        date: new Date().toISOString().slice(0, 10),
+        date: localDateString(new Date()),
       });
       leaderboard = scored.board;
       lastRank = scored.rank;

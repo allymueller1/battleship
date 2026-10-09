@@ -498,6 +498,31 @@ describe('the local leaderboard', () => {
       root.remove();
     }
   });
+
+  it('dates a win in local time, not UTC', () => {
+    const proc = (globalThis as { process?: { env: Record<string, string | undefined> } })
+      .process!;
+    const previousTz = proc.env.TZ;
+    proc.env.TZ = 'America/New_York';
+    vi.useFakeTimers();
+    // 02:00 UTC on Oct 7 is still Oct 6 in New York.
+    vi.setSystemTime(new Date('2026-10-07T02:00:00Z'));
+    const store = fakeStore();
+    const root = document.createElement('div');
+    document.body.append(root);
+    try {
+      toIntro(root, store);
+      winOnCadet(root);
+      expect(statusText(root)).toContain('Victory!');
+      vi.advanceTimersByTime(VICTORY_DELAY_MS);
+      const saved = JSON.parse(store.data.get(LEADERBOARD_KEY)!);
+      expect(saved.easy[0].date).toBe('2026-10-06');
+    } finally {
+      vi.useRealTimers();
+      proc.env.TZ = previousTz;
+      root.remove();
+    }
+  });
 });
 
 describe('randomizing while a ship is being dragged', () => {

@@ -5,6 +5,7 @@ import {
   emptyLeaderboard,
   LEADERBOARD_KEY,
   loadLeaderboard,
+  localDateString,
   MAX_ENTRIES,
   rankMessage,
   saveLeaderboard,
@@ -149,5 +150,11 @@ describe('rankMessage', () => {
 
   it('is empty when the score did not rank', () => {
     expect(rankMessage(null, 'Captain')).toBe('');
+  });
+});
+
+describe('localDateString', () => {
+  it('formats the date in local time, not UTC', () => {
+    expect(localDateString(new Date(2026, 0, 5, 23, 30))).toBe('2026-01-05');
   });
 });
