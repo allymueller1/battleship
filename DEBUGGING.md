@@ -225,3 +225,16 @@ in self-testing, so that recurring failure modes stay visible.
   and "New game during the end pause keeps the dialog closed"
   (app.test.ts).
 - **PR:** https://github.com/allymueller1/battleship/pull/12
+
+### 14. The starfield and victory warp were hidden behind the page
+
+- **What happened:** In the Nebula Strike redesign (PR 13), the starfield
+  and the victory warp never showed. The page looked plain black.
+- **How it was found:** Devin Review on PR 13.
+- **Root cause:** `.starfield` has `z-index: -1` inside `#app`. `#app` is
+  positioned but has no z-index, so it doesn't create a stacking context.
+  That put the starfield in the page's root layer, underneath the body's
+  opaque background.
+- **Fix:** `isolation: isolate` on `#app`, so the starfield's -1 stays
+  inside `#app`, above the body background and below the content.
+- **PR:** https://github.com/allymueller1/battleship/pull/13

@@ -1,7 +1,7 @@
 import type { GameState, MoveRejection, Player } from '../game/game';
-import { getShipSpec } from '../game/ships';
 import type { Board, Coord, ShipType, ShotResult } from '../game/types';
 import type { PlaceError } from './placement';
+import { shipDisplayName } from './theme';
 
 const COLUMNS = 'ABCDEFGHIJ';
 
@@ -11,7 +11,7 @@ export function coordLabel(c: Coord): string {
 }
 
 function shipName(type: ShipType): string {
-  return getShipSpec(type).name;
+  return shipDisplayName(type);
 }
 
 /** Describes a shot. A hit on the computer's fleet does not reveal which ship was hit. */
@@ -20,35 +20,35 @@ export function shotMessage(shooter: Player, result: ShotResult): string {
   if (shooter === 'player') {
     switch (result.kind) {
       case 'miss':
-        return `You fired at ${at}: miss.`;
+        return `Your strike at ${at}: miss.`;
       case 'hit':
-        return `You fired at ${at}: hit!`;
+        return `Your strike at ${at}: hit!`;
       case 'sunk':
-        return `You fired at ${at}: hit! You sank the computer's ${shipName(result.ship.type)}.`;
+        return `Your strike at ${at}: hit! You destroyed the enemy ${shipName(result.ship.type)}.`;
     }
   }
   switch (result.kind) {
     case 'miss':
-      return `The computer fired at ${at}: miss.`;
+      return `Enemy strike at ${at}: miss.`;
     case 'hit':
-      return `The computer fired at ${at}: hit on your ${shipName(result.shipType)}.`;
+      return `Enemy strike at ${at}: hit on your ${shipName(result.shipType)}.`;
     case 'sunk':
-      return `The computer fired at ${at} and sank your ${shipName(result.ship.type)}.`;
+      return `Enemy strike at ${at} destroyed your ${shipName(result.ship.type)}.`;
   }
 }
 
 export function rejectionMessage(reason: MoveRejection, coord: Coord): string {
   switch (reason) {
     case 'already-fired':
-      return `You already fired at ${coordLabel(coord)}. Pick a cell you haven't tried.`;
+      return `You already struck ${coordLabel(coord)}. Pick a new target.`;
     case 'not-your-turn':
-      return "Hold on, it's the computer's turn.";
+      return 'Hold on, the enemy is firing.';
     case 'game-over':
-      return 'The game is over. Choose Play again to start a new one.';
+      return 'The battle is over. Choose Play again to start a new one.';
     case 'wrong-phase':
-      return 'Place your fleet and start the battle first.';
+      return 'Deploy your fleet and start the battle first.';
     case 'out-of-bounds':
-      return 'That cell is off the board.';
+      return 'That target is off the grid.';
   }
 }
 
@@ -58,7 +58,7 @@ export function placementMessage(error: PlaceError, type: ShipType | null): stri
     case 'none-selected':
       return 'All ships are placed. Select a ship to move it, or start the battle.';
     case 'out-of-bounds':
-      return `${name} doesn't fit there because it would go off the board.`;
+      return `${name} doesn't fit there because it would go off the grid.`;
     case 'overlap':
       return `${name} would overlap another ship.`;
     case 'already-placed':
@@ -98,10 +98,10 @@ export function endSummary(state: GameState, level: string): EndSummary {
   const shots = won ? state.computerBoard.shots.size : state.playerBoard.shots.size;
   return {
     won,
-    title: won ? 'You win!' : 'You lose',
+    title: won ? 'Victory!' : 'Defeat',
     text: won
-      ? `You sank the enemy fleet in ${shots} shots on ${level}.`
-      : `The computer sank your fleet in ${shots} shots on ${level}.`,
+      ? `You destroyed the enemy fleet in ${shots} strikes on ${level}.`
+      : `The enemy destroyed your fleet in ${shots} strikes on ${level}.`,
     player: shotStats(state.computerBoard),
     computer: shotStats(state.playerBoard),
   };
@@ -110,14 +110,14 @@ export function endSummary(state: GameState, level: string): EndSummary {
 export function turnMessage(state: GameState): string {
   switch (state.phase) {
     case 'placing':
-      return 'Place your fleet: choose a ship, then a cell. Press R or Rotate to turn it.';
+      return 'Deploy your fleet: choose a ship, then a cell. Press R or Rotate to turn it.';
     case 'over':
       return state.winner === 'player'
-        ? 'You win! You sank the whole enemy fleet.'
-        : 'You lose. The computer sank your whole fleet.';
+        ? 'Victory! You destroyed the whole enemy fleet.'
+        : 'Defeat. The enemy destroyed your whole fleet.';
     case 'playing':
       return state.turn === 'player'
-        ? 'Your turn: fire at a cell in Enemy waters.'
-        : "Computer's turn…";
+        ? 'Your turn: target a cell in the Enemy sector.'
+        : "Enemy's turn…";
   }
 }

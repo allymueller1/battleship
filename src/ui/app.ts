@@ -3,10 +3,11 @@ import { isFleetComplete, shipAt } from '../game/board';
 import { coordKey } from '../game/coord';
 import { createGame, fire, startGame, type GameState } from '../game/game';
 import type { Rng } from '../game/rng';
-import { FLEET } from '../game/ships';
+import { FLEET, getShipSpec } from '../game/ships';
 import { isShipSunk } from '../game/shots';
-import type { Board, Coord } from '../game/types';
-import { createBoardView, type CellView } from './boardView';
+import type { Board, Coord, PlacedShip, ShotResult } from '../game/types';
+import { createBoardView, type CellView, type ShipSprite } from './boardView';
+import { shipSvg } from './shipArt';
 import { LEVELS, levelName } from './levels';
 import { createFleetTracker } from './fleetTracker';
 import {
@@ -28,23 +29,35 @@ import {
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
+import { effectForShot, SHAKE_MS, VICTORY_DELAY_MS } from './effects';
+import { shipDisplayName } from './theme';
+import { BRIEFING_LINES, createTitleScreen } from './titleScreen';
 
 export const COMPUTER_DELAY_MS = 700;
 export const END_SCREEN_DELAY_MS = 1200;
 
 const TEMPLATE = `
+  <div class="starfield" aria-hidden="true"><div class="stars stars--far"></div><div class="stars stars--near"></div></div>
+  <section class="title-screen" data-ref="title">
+    <h1 class="title-logo">Nebula Strike</h1>
+    <p class="visually-hidden">${BRIEFING_LINES.join(' ')}</p>
+    <div class="briefing" data-ref="briefing" aria-hidden="true">
+      ${BRIEFING_LINES.map(() => '<p class="briefing-line"></p>').join('')}
+    </div>
+    <button type="button" class="primary launch" data-ref="launch" hidden>Launch</button>
+  </section>
   <section class="intro" aria-labelledby="intro-title" data-ref="intro">
-    <h1 id="intro-title" class="intro-title">Welcome to Battleship</h1>
-    <p class="intro-subtitle">Sink the computer's fleet before it sinks yours.</p>
+    <h1 id="intro-title" class="intro-title">Choose your mission</h1>
+    <p class="intro-subtitle">Destroy the enemy fleet before it destroys yours.</p>
     <fieldset class="level-picker">
       <legend class="visually-hidden">Choose a level</legend>
       <div class="level-cards" data-ref="levelCards"></div>
     </fieldset>
     <p class="intro-note">No level can see your ships. Each one only knows its own hits and misses. A good human player usually needs about 50 to 60 shots.</p>
-    <button type="button" class="primary intro-start" data-ref="introStart">Start</button>
+    <button type="button" class="primary intro-start" data-ref="introStart">Start mission</button>
   </section>
   <header class="top" data-ref="top">
-    <h1>Battleship</h1>
+    <h1>Nebula Strike</h1>
     <button type="button" class="secondary" data-ref="newGame" hidden>New game</button>
   </header>
   <div class="status" role="status" aria-live="polite" data-ref="status">
@@ -54,7 +67,7 @@ const TEMPLATE = `
   </div>
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
-      <h2 id="setup-title">Place your fleet</h2>
+      <h2 id="setup-title">Deploy your fleet</h2>
       <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Select a placed ship to move it.</p>
       <div class="ship-list" role="group" aria-label="Ships" data-ref="shipList"></div>
       <div class="controls">
@@ -65,7 +78,7 @@ const TEMPLATE = `
       <button type="button" class="primary" data-ref="start">Start battle</button>
     </section>
     <section class="panel" aria-labelledby="enemy-title" data-ref="enemyPanel">
-      <h2 id="enemy-title">Enemy waters</h2>
+      <h2 id="enemy-title">Enemy sector</h2>
       <div data-ref="enemyBoard"></div>
       <div data-ref="enemyTracker"></div>
     </section>
@@ -101,8 +114,29 @@ function sunkCellKeys(board: Board): Set<string> {
   return keys;
 }
 
+function shipSprite(ship: PlacedShip, state: 'intact' | 'wreck'): ShipSprite {
+  return {
+    type: ship.type,
+    origin: ship.origin,
+    orientation: ship.orientation,
+    length: getShipSpec(ship.type).length,
+    state,
+  };
+}
+
+export interface MountOptions {
+  readonly reducedMotion?: () => boolean;
+}
+
 /** Wires the pure game logic to the DOM. `rng` is injectable so tests can seed it. */
-export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
+export function mountApp(
+  root: HTMLElement,
+  rng: Rng = Math.random,
+  options: MountOptions = {},
+): void {
+  const reducedMotion =
+    options.reducedMotion ??
+    (() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   root.innerHTML = TEMPLATE;
   const el = {
     newGame: ref<HTMLButtonElement>(root, 'newGame'),
@@ -114,6 +148,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     shipList: ref(root, 'shipList'),
     rotate: ref<HTMLButtonElement>(root, 'rotate'),
     randomize: ref<HTMLButtonElement>(root, 'randomize'),
+    title: ref(root, 'title'),
+    briefing: ref(root, 'briefing'),
+    launch: ref<HTMLButtonElement>(root, 'launch'),
     intro: ref(root, 'intro'),
     introStart: ref<HTMLButtonElement>(root, 'introStart'),
     levelCards: ref(root, 'levelCards'),
@@ -130,7 +167,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     playAgain: ref<HTMLButtonElement>(root, 'playAgain'),
   };
 
-  let screen: 'intro' | 'game' = 'intro';
+  let screen: 'title' | 'intro' | 'game' = 'title';
   let game: GameState = createGame(rng);
   let placement: PlacementState = initialPlacement();
   let difficulty: Difficulty = 'normal';
@@ -140,6 +177,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   let note = '';
   let computerTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
+  let shakeTimer: ReturnType<typeof setTimeout> | undefined;
   // Recomputed once per render; playerCell/enemyCell close over them.
   let playerSunk = new Set<string>();
   let enemySunk = new Set<string>();
@@ -152,7 +190,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       render();
     },
   });
-  const enemyView = createBoardView({ label: 'Enemy waters', onActivate: onEnemyCell });
+  const enemyView = createBoardView({ label: 'Enemy sector', onActivate: onEnemyCell });
   const playerTracker = createFleetTracker('Your ships');
   const enemyTracker = createFleetTracker('Enemy ships');
   ref(root, 'playerBoard').append(playerView.element);
@@ -164,13 +202,19 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ship-button';
+    const icon = document.createElement('span');
+    icon.className = 'ship-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = shipSvg(spec.type);
+    const label = document.createElement('span');
+    button.append(icon, label);
     button.addEventListener('click', () => {
       placement = selectShip(placement, spec.type);
       note = '';
       render();
     });
     el.shipList.append(button);
-    return { spec, button };
+    return { spec, button, label };
   });
 
   for (const { level, name, description, averageShots } of LEVELS) {
@@ -220,7 +264,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   });
   el.randomize.addEventListener('click', () => {
     placement = randomizePlacement(placement, rng);
-    note = 'Fleet placed at random. Start the battle, or select a ship to move it.';
+    note = 'Fleet deployed at random. Start the battle, or select a ship to move it.';
     render();
   });
   el.start.addEventListener('click', () => {
@@ -276,8 +320,9 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     playerResult = shotMessage('player', outcome.result);
     note = '';
     render();
+    afterShot(enemyView, outcome.result);
     if (game.phase === 'over') {
-      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
+      scheduleEnd();
     } else {
       computerTimer = setTimeout(computerMove, COMPUTER_DELAY_MS);
     }
@@ -293,9 +338,26 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     computerResult = shotMessage('computer', outcome.result);
     note = '';
     render();
+    afterShot(playerView, outcome.result);
     if (game.phase === 'over') {
-      endTimer = setTimeout(showEnd, END_SCREEN_DELAY_MS);
+      scheduleEnd();
     }
+  }
+
+  function afterShot(view: typeof enemyView, result: ShotResult): void {
+    const fx = effectForShot(result);
+    view.spawnEffect(fx.kind, fx.cells, !reducedMotion());
+    if (fx.kind === 'sunk' && !reducedMotion()) {
+      root.classList.add('shake');
+      clearTimeout(shakeTimer);
+      shakeTimer = setTimeout(() => root.classList.remove('shake'), SHAKE_MS);
+    }
+  }
+
+  function scheduleEnd(): void {
+    const won = game.winner === 'player';
+    root.classList.add(won ? 'fx-victory' : 'fx-defeat');
+    endTimer = setTimeout(showEnd, won ? VICTORY_DELAY_MS : END_SCREEN_DELAY_MS);
   }
 
   function showEnd(): void {
@@ -304,10 +366,10 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     el.endText.textContent = summary.text;
     el.endStats.replaceChildren(
       ...[
-        ['Your shots', summary.player.shots],
+        ['Your strikes', summary.player.shots],
         ['Your hits', summary.player.hits],
-        ['Computer shots', summary.computer.shots],
-        ['Computer hits', summary.computer.hits],
+        ['Enemy strikes', summary.computer.shots],
+        ['Enemy hits', summary.computer.hits],
       ].map(([term, value]) => {
         const item = document.createElement('div');
         item.className = 'end-stat';
@@ -325,10 +387,16 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   }
 
   function reset(): void {
+    titleScreen.stop();
     clearTimeout(computerTimer);
     clearTimeout(endTimer);
+    clearTimeout(shakeTimer);
     computerTimer = undefined;
     endTimer = undefined;
+    shakeTimer = undefined;
+    playerView.clearEffects();
+    enemyView.clearEffects();
+    root.classList.remove('shake', 'fx-victory', 'fx-defeat');
     if (el.endDialog.open) {
       el.endDialog.close();
     }
@@ -351,15 +419,15 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       const classes: string[] = [];
       if (ship) classes.push('ship');
       if (inPreview) classes.push(preview?.valid ? 'preview-valid' : 'preview-invalid');
-      const shipName = ship ? FLEET.find((s) => s.type === ship.type)?.name : undefined;
-      return { classes, label: shipName ? `${label}, ${shipName}` : `${label}, empty` };
+      const name = ship ? shipDisplayName(ship.type) : undefined;
+      return { classes, label: name ? `${label}, ${name}` : `${label}, empty` };
     }
     const board = game.playerBoard;
     const ship = shipAt(board, c);
     const mark = board.shots.get(coordKey(c));
     const sunk = playerSunk.has(coordKey(c));
     const classes = [ship ? 'ship' : '', mark ?? '', sunk ? 'sunk' : ''].filter(Boolean);
-    const parts = [label, ship ? FLEET.find((s) => s.type === ship.type)?.name : 'water'];
+    const parts = [label, ship ? shipDisplayName(ship.type) : 'water'];
     if (mark) parts.push(sunk ? 'sunk' : mark);
     return { classes, label: parts.join(', ') };
   }
@@ -378,12 +446,14 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   function render(): void {
     const intro = screen === 'intro';
     const placing = game.phase === 'placing';
-    root.dataset.screen = intro ? 'intro' : placing ? 'placing' : 'battle';
+    root.dataset.screen =
+      screen === 'title' ? 'title' : intro ? 'intro' : placing ? 'placing' : 'battle';
     root.dataset.phase = placing ? 'placing' : 'battle';
+    el.title.hidden = screen !== 'title';
     el.intro.hidden = !intro;
-    el.top.hidden = intro;
-    el.status.hidden = intro;
-    el.layout.hidden = intro;
+    el.top.hidden = screen !== 'game';
+    el.status.hidden = screen !== 'game';
+    el.layout.hidden = screen !== 'game';
     el.levelName.textContent = levelName(difficulty);
     el.setup.hidden = !placing;
     el.enemyPanel.hidden = placing;
@@ -408,25 +478,49 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     const interactivity = boardInteractivity(game);
     playerView.setInteractive(interactivity.player);
     enemyView.setInteractive(interactivity.enemy);
+
+    const playerBoard = placing ? placement.board : game.playerBoard;
+    playerView.setShips(
+      playerBoard.ships.map((s) => shipSprite(s, isShipSunk(playerBoard, s) ? 'wreck' : 'intact')),
+    );
+    enemyView.setShips(
+      game.computerBoard.ships
+        .filter((s) => isShipSunk(game.computerBoard, s) || game.phase === 'over')
+        .map((s) => shipSprite(s, isShipSunk(game.computerBoard, s) ? 'wreck' : 'intact')),
+    );
+
     playerView.update(playerCell);
     enemyView.update(enemyCell);
     playerTracker.update(game.playerBoard);
     enemyTracker.update(game.computerBoard);
 
-    for (const { spec, button } of shipButtons) {
+    for (const { spec, button, label } of shipButtons) {
       const placed = placement.board.ships.some((s) => s.type === spec.type);
       const selected = placement.selected === spec.type;
       button.setAttribute('aria-pressed', String(selected));
       button.classList.toggle('placed', placed);
-      button.textContent = `${spec.name} (${spec.length})${placed ? ' ✓' : ''}`;
+      const name = shipDisplayName(spec.type);
+      label.textContent = `${name} (${spec.length})${placed ? ' ✓' : ''}`;
       button.setAttribute(
         'aria-label',
-        `${spec.name}, length ${spec.length}, ${placed ? 'placed' : 'not placed'}`,
+        `${name}, length ${spec.length}, ${placed ? 'placed' : 'not placed'}`,
       );
     }
     el.rotate.textContent = `Rotate (${placement.orientation})`;
     el.start.disabled = !isFleetComplete(placement.board);
   }
+
+  const titleScreen = createTitleScreen({
+    briefing: el.briefing,
+    launch: el.launch,
+    reducedMotion,
+    onLaunch: () => {
+      screen = 'intro';
+      render();
+      el.levelCards.querySelector<HTMLInputElement>('input:checked')?.focus();
+    },
+  });
+  titleScreen.start();
 
   render();
 }

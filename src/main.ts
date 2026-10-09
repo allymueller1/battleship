@@ -1,4 +1,5 @@
 import '@fontsource-variable/inter';
+import '@fontsource/orbitron/700.css';
 import './styles.css';
 import { mountApp } from './ui/app';
 
