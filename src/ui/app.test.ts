@@ -39,7 +39,7 @@ function enemyCell(root: HTMLElement, row: number, col: number): HTMLButtonEleme
 
 function isOver(root: HTMLElement): boolean {
   const text = statusText(root);
-  return text.includes('You win!') || text.includes('You lose');
+  return text.includes('Victory!') || text.includes('Defeat');
 }
 
 function playUntilOver(root: HTMLElement): void {
@@ -72,12 +72,12 @@ describe('status lines', () => {
     enemyCell(root, 0, 0).click();
     const playerResult = ref(root, 'playerResult');
     const computerResult = ref(root, 'computerResult');
-    expect(statusText(root)).toContain('You fired at A1');
+    expect(statusText(root)).toContain('Your strike at A1');
 
     vi.advanceTimersByTime(COMPUTER_DELAY_MS);
-    expect(statusText(root)).toContain('You fired at A1');
-    expect(playerResult.textContent).toMatch(/^You fired at A1/);
-    expect(computerResult.textContent).toMatch(/^The computer fired at/);
+    expect(statusText(root)).toContain('Your strike at A1');
+    expect(playerResult.textContent).toMatch(/^Your strike at A1/);
+    expect(computerResult.textContent).toMatch(/^Enemy strike at/);
   });
 
   it('a rejection note does not replace the last shot result', () => {
@@ -86,9 +86,9 @@ describe('status lines', () => {
     const before = ref(root, 'playerResult').textContent;
 
     enemyCell(root, 0, 0).click();
-    expect(statusText(root)).toContain('You fired at A1');
+    expect(statusText(root)).toContain('Your strike at A1');
     expect(ref(root, 'playerResult').textContent).toBe(before);
-    expect(ref(root, 'statusTurn').textContent).toContain('You already fired at A1');
+    expect(ref(root, 'statusTurn').textContent).toContain('You already struck A1');
   });
 
   it('pauses before opening the end screen', () => {

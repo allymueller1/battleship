@@ -28,23 +28,24 @@ import {
   type PlacementState,
 } from './placement';
 import { boardInteractivity } from './interactivity';
+import { shipDisplayName } from './theme';
 
 export const COMPUTER_DELAY_MS = 700;
 export const END_SCREEN_DELAY_MS = 1200;
 
 const TEMPLATE = `
   <section class="intro" aria-labelledby="intro-title" data-ref="intro">
-    <h1 id="intro-title" class="intro-title">Welcome to Battleship</h1>
-    <p class="intro-subtitle">Sink the computer's fleet before it sinks yours.</p>
+    <h1 id="intro-title" class="intro-title">Choose your mission</h1>
+    <p class="intro-subtitle">Destroy the enemy fleet before it destroys yours.</p>
     <fieldset class="level-picker">
       <legend class="visually-hidden">Choose a level</legend>
       <div class="level-cards" data-ref="levelCards"></div>
     </fieldset>
     <p class="intro-note">No level can see your ships. Each one only knows its own hits and misses. A good human player usually needs about 50 to 60 shots.</p>
-    <button type="button" class="primary intro-start" data-ref="introStart">Start</button>
+    <button type="button" class="primary intro-start" data-ref="introStart">Start mission</button>
   </section>
   <header class="top" data-ref="top">
-    <h1>Battleship</h1>
+    <h1>Nebula Strike</h1>
     <button type="button" class="secondary" data-ref="newGame" hidden>New game</button>
   </header>
   <div class="status" role="status" aria-live="polite" data-ref="status">
@@ -54,7 +55,7 @@ const TEMPLATE = `
   </div>
   <main class="layout" data-ref="layout">
     <section class="panel setup" aria-labelledby="setup-title" data-ref="setup">
-      <h2 id="setup-title">Place your fleet</h2>
+      <h2 id="setup-title">Deploy your fleet</h2>
       <p class="hint">Choose a ship, then a cell on your board. Use the arrow keys to move, Enter to place, and R to rotate. Select a placed ship to move it.</p>
       <div class="ship-list" role="group" aria-label="Ships" data-ref="shipList"></div>
       <div class="controls">
@@ -65,7 +66,7 @@ const TEMPLATE = `
       <button type="button" class="primary" data-ref="start">Start battle</button>
     </section>
     <section class="panel" aria-labelledby="enemy-title" data-ref="enemyPanel">
-      <h2 id="enemy-title">Enemy waters</h2>
+      <h2 id="enemy-title">Enemy sector</h2>
       <div data-ref="enemyBoard"></div>
       <div data-ref="enemyTracker"></div>
     </section>
@@ -152,7 +153,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       render();
     },
   });
-  const enemyView = createBoardView({ label: 'Enemy waters', onActivate: onEnemyCell });
+  const enemyView = createBoardView({ label: 'Enemy sector', onActivate: onEnemyCell });
   const playerTracker = createFleetTracker('Your ships');
   const enemyTracker = createFleetTracker('Enemy ships');
   ref(root, 'playerBoard').append(playerView.element);
@@ -220,7 +221,7 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
   });
   el.randomize.addEventListener('click', () => {
     placement = randomizePlacement(placement, rng);
-    note = 'Fleet placed at random. Start the battle, or select a ship to move it.';
+    note = 'Fleet deployed at random. Start the battle, or select a ship to move it.';
     render();
   });
   el.start.addEventListener('click', () => {
@@ -304,10 +305,10 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
     el.endText.textContent = summary.text;
     el.endStats.replaceChildren(
       ...[
-        ['Your shots', summary.player.shots],
+        ['Your strikes', summary.player.shots],
         ['Your hits', summary.player.hits],
-        ['Computer shots', summary.computer.shots],
-        ['Computer hits', summary.computer.hits],
+        ['Enemy strikes', summary.computer.shots],
+        ['Enemy hits', summary.computer.hits],
       ].map(([term, value]) => {
         const item = document.createElement('div');
         item.className = 'end-stat';
@@ -351,15 +352,15 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       const classes: string[] = [];
       if (ship) classes.push('ship');
       if (inPreview) classes.push(preview?.valid ? 'preview-valid' : 'preview-invalid');
-      const shipName = ship ? FLEET.find((s) => s.type === ship.type)?.name : undefined;
-      return { classes, label: shipName ? `${label}, ${shipName}` : `${label}, empty` };
+      const name = ship ? shipDisplayName(ship.type) : undefined;
+      return { classes, label: name ? `${label}, ${name}` : `${label}, empty` };
     }
     const board = game.playerBoard;
     const ship = shipAt(board, c);
     const mark = board.shots.get(coordKey(c));
     const sunk = playerSunk.has(coordKey(c));
     const classes = [ship ? 'ship' : '', mark ?? '', sunk ? 'sunk' : ''].filter(Boolean);
-    const parts = [label, ship ? FLEET.find((s) => s.type === ship.type)?.name : 'water'];
+    const parts = [label, ship ? shipDisplayName(ship.type) : 'water'];
     if (mark) parts.push(sunk ? 'sunk' : mark);
     return { classes, label: parts.join(', ') };
   }
@@ -418,10 +419,11 @@ export function mountApp(root: HTMLElement, rng: Rng = Math.random): void {
       const selected = placement.selected === spec.type;
       button.setAttribute('aria-pressed', String(selected));
       button.classList.toggle('placed', placed);
-      button.textContent = `${spec.name} (${spec.length})${placed ? ' ✓' : ''}`;
+      const name = shipDisplayName(spec.type);
+      button.textContent = `${name} (${spec.length})${placed ? ' ✓' : ''}`;
       button.setAttribute(
         'aria-label',
-        `${spec.name}, length ${spec.length}, ${placed ? 'placed' : 'not placed'}`,
+        `${name}, length ${spec.length}, ${placed ? 'placed' : 'not placed'}`,
       );
     }
     el.rotate.textContent = `Rotate (${placement.orientation})`;

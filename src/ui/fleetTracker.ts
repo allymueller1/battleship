@@ -1,6 +1,7 @@
 import { fleetStatus } from '../game/shots';
 import { FLEET } from '../game/ships';
 import type { Board } from '../game/types';
+import { shipDisplayName } from './theme';
 
 export interface FleetTracker {
   readonly element: HTMLElement;
@@ -20,7 +21,7 @@ export function createFleetTracker(title: string): FleetTracker {
     const li = document.createElement('li');
     const name = document.createElement('span');
     name.className = 'tracker-name';
-    name.textContent = spec.name;
+    name.textContent = shipDisplayName(spec.type);
     const pips = document.createElement('span');
     pips.className = 'tracker-pips';
     pips.setAttribute('aria-hidden', 'true');

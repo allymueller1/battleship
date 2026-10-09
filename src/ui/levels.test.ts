@@ -17,8 +17,8 @@ describe('LEVELS', () => {
 
 describe('levelName', () => {
   it('names each difficulty', () => {
-    expect(levelName('easy')).toBe('Easy');
-    expect(levelName('normal')).toBe('Normal');
-    expect(levelName('hard')).toBe('Hard');
+    expect(levelName('easy')).toBe('Cadet');
+    expect(levelName('normal')).toBe('Captain');
+    expect(levelName('hard')).toBe('Admiral');
   });
 });
